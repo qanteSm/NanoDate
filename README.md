@@ -17,7 +17,7 @@
   <a href="#-the-size-difference">Size Comparison</a> •
   <a href="#-why-nanodate">Why NanoDate</a> •
   <a href="#-quick-start">Quick Start</a> •
-  <a href="#-api">API</a> •
+  <a href="./API.md">Full API Reference</a> •
   <a href="#-runtime-support">Runtime Support</a>
 </p>
 
