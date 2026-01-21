@@ -115,7 +115,7 @@ Other date libraries ignore what browsers already know. They bundle locale files
 
 ## 🚀 Try It Now
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/edit/nanodate-playground?file=index.js)
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/edit/nanodate-playground?file=src%2Fmain.js)
 
 ```javascript
 // Try these in the playground!
@@ -674,7 +674,7 @@ MIT © [Muhammet Ali Büyük](https://github.com/qantesm)
 <p align="center">
   <a href="https://github.com/qantesm/nanodate">GitHub</a> •
   <a href="https://www.npmjs.com/package/@qantesm/nanodate">npm</a> •
-  <a href="https://stackblitz.com/edit/nanodate-playground">Playground</a>
+  <a href="https://stackblitz.com/edit/nanodate-playground?file=src%2Fmain.js">Playground</a>
 </p>
 
 
