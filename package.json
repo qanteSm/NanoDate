@@ -1,21 +1,22 @@
 {
     "name": "@qantesm/nanodate",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "World's smallest date library. Zero-locale-payload. Intl-native.",
+    "type": "module",
     "main": "dist/nanodate.cjs.js",
     "module": "dist/nanodate.esm.js",
     "types": "dist/nanodate.d.ts",
     "sideEffects": false,
     "exports": {
         ".": {
+            "types": "./dist/nanodate.d.ts",
             "import": "./dist/nanodate.esm.js",
-            "require": "./dist/nanodate.cjs.js",
-            "types": "./dist/nanodate.d.ts"
+            "require": "./dist/nanodate.cjs.js"
         },
         "./lite": {
+            "types": "./dist/lite.d.ts",
             "import": "./dist/lite.esm.js",
-            "require": "./dist/lite.cjs.js",
-            "types": "./dist/lite.d.ts"
+            "require": "./dist/lite.cjs.js"
         }
     },
     "files": [

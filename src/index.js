@@ -8,9 +8,23 @@
 
 import { format } from './format.js';
 import { fromNow, toNow } from './relative.js';
-import { add, subtract, startOf, endOf } from './manipulate.js';
-import { diff, isBefore, isAfter, isSame, isValid } from './utils.js';
+import { add, subtract, startOf, endOf, set, init as initManipulate } from './manipulate.js';
+import { diff, isBefore, isAfter, isSame, isSameOrBefore, isSameOrAfter, isBetween, isValid, isLeapYear, daysInMonth, dayOfYear, week, quarter } from './utils.js';
 import { tz, utcOffset } from './timezone.js';
+
+/**
+ * Plugin registry for extending NanoDate
+ */
+const plugins = {};
+
+/**
+ * Extend NanoDate with a plugin
+ * @param {string} name - Method name
+ * @param {Function} fn - Method implementation (ctx, ...args) => result
+ */
+export const extend = (name, fn) => {
+    plugins[name] = fn;
+};
 
 /**
  * Method registry - tüm metodlar burada toplanır
@@ -24,11 +38,20 @@ const methods = {
     subtract,
     startOf,
     endOf,
+    set,
     diff,
     isBefore,
     isAfter,
     isSame,
+    isSameOrBefore,
+    isSameOrAfter,
+    isBetween,
     isValid,
+    isLeapYear,
+    daysInMonth,
+    dayOfYear,
+    week,
+    quarter,
     tz,
     utcOffset,
 
@@ -65,6 +88,11 @@ const handler = {
         // Önce methods'ta ara
         if (prop in methods) {
             return (...args) => methods[prop](target, ...args);
+        }
+
+        // Plugin'lerde ara
+        if (prop in plugins) {
+            return (...args) => plugins[prop](target, ...args);
         }
 
         // Symbol.toPrimitive - Date math için
@@ -167,6 +195,9 @@ export const checkIntlSupport = () => {
         return false;
     }
 };
+
+// Initialize modules with circular dependencies
+initManipulate(nano);
 
 // Default export
 export default nano;

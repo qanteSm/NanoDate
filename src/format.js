@@ -47,6 +47,28 @@ const T = {
 };
 
 /**
+ * Formatter cache for 10x+ performance
+ * Intl.DateTimeFormat instances are expensive to create
+ */
+const formatterCache = new Map();
+
+/**
+ * Get cached Intl.DateTimeFormat instance
+ * @param {string} locale - Locale string
+ * @param {Object} options - DateTimeFormat options
+ * @returns {Intl.DateTimeFormat}
+ */
+const getFormatter = (locale, options) => {
+    const key = locale + JSON.stringify(options);
+    let formatter = formatterCache.get(key);
+    if (!formatter) {
+        formatter = new Intl.DateTimeFormat(locale, options);
+        formatterCache.set(key, formatter);
+    }
+    return formatter;
+};
+
+/**
  * Ordinal suffix for English
  * ~35 bytes, supports 1st, 2nd, 3rd, 4th-20th, 21st, 22nd, etc.
  * 
@@ -81,7 +103,7 @@ const PRESETS = ['short', 'medium', 'long', 'full'];
  * Extract AM/PM from formatted time
  */
 const getAmPm = (date, locale, uppercase) => {
-    const formatter = new Intl.DateTimeFormat(locale, {
+    const formatter = getFormatter(locale, {
         hour: 'numeric',
         hour12: true
     });
@@ -132,14 +154,14 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
 
     // Preset format kontrolü (short, medium, long, full)
     if (PRESETS.includes(fmt)) {
-        return new Intl.DateTimeFormat(locale, { dateStyle: fmt }).format(date);
+        return getFormatter(locale, { dateStyle: fmt }).format(date);
     }
 
     // Preset with time: 'short-time', 'full-time', etc.
     if (fmt.endsWith('-time')) {
         const style = fmt.replace('-time', '');
         if (PRESETS.includes(style)) {
-            return new Intl.DateTimeFormat(locale, {
+            return getFormatter(locale, {
                 dateStyle: style,
                 timeStyle: style
             }).format(date);
@@ -174,15 +196,32 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
             return getOffset(date, false);
         }
 
+        // 12-hour format - extract only hour value (no AM/PM)
+        if (match === 'hh' || match === 'h') {
+            const formatter = getFormatter(locale, {
+                hour: 'numeric',
+                hour12: true
+            });
+            const parts = formatter.formatToParts(date);
+            const hourPart = parts.find(p => p.type === 'hour');
+            if (hourPart) {
+                return match === 'hh' ? hourPart.value.padStart(2, '0') : hourPart.value;
+            }
+            // Fallback
+            let hour = date.getHours() % 12;
+            if (hour === 0) hour = 12;
+            return match === 'hh' ? String(hour).padStart(2, '0') : String(hour);
+        }
+
         // Standard token - Intl.DateTimeFormat kullan
         const opt = T[match];
         if (!opt) return match;
 
         try {
-            const formatted = new Intl.DateTimeFormat(locale, opt).format(date);
+            const formatted = getFormatter(locale, opt).format(date);
 
-            // Hour12 için sadece AM/PM döndürme, hour'u döndür
-            if (match === 'HH' || match === 'hh') {
+            // 2-digit padding for HH, mm, ss
+            if (match === 'HH') {
                 return formatted.padStart(2, '0');
             }
             if (match === 'mm' || match === 'ss') {

@@ -4,7 +4,18 @@
  * All operations return new NanoDate instances
  */
 
-import { nano } from './index.js';
+/**
+ * NanoDate factory placeholder
+ */
+let nano;
+
+/**
+ * Initialize with factory
+ * @param {Function} factory - nano factory function
+ */
+export const init = (factory) => {
+    nano = factory;
+};
 
 /**
  * Unit abbreviations to full names
