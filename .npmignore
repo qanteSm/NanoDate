@@ -1,0 +1,39 @@
+# Development files - not needed in npm package
+tests/
+benchmarks/
+.git/
+.github/
+
+# Config files
+rollup.config.js
+vitest.config.js
+.gitattributes
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Build artifacts not needed
+*.tsbuildinfo
+
+# Keep these (explicitly):
+# - dist/
+# - src/
+# - README.md
+# - LICENSE
+# - package.json
