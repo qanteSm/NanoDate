@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/nanodate?style=for-the-badge&color=blue" alt="npm version" />
-  <img src="https://img.shields.io/bundlephobia/minzip/nanodate?style=for-the-badge&color=brightgreen&label=size" alt="Bundle Size" />
+  <img src="https://img.shields.io/npm/v/@qantesm/nanodate?style=for-the-badge&color=blue" alt="npm version" />
+  <img src="https://img.shields.io/bundlephobia/minzip/@qantesm/nanodate?style=for-the-badge&color=brightgreen&label=size" alt="Bundle Size" />
   <img src="https://img.shields.io/badge/zero--locale--payload-✓-purple?style=for-the-badge" alt="Zero Locale Payload" />
   <img src="https://img.shields.io/badge/immutable-100%25-orange?style=for-the-badge" alt="100% Immutable" />
-  <img src="https://img.shields.io/npm/l/nanodate?style=for-the-badge&color=green" alt="MIT License" />
+  <img src="https://img.shields.io/npm/l/@qantesm/nanodate?style=for-the-badge&color=green" alt="MIT License" />
 </p>
 
 <h1 align="center">🕐 NanoDate</h1>
@@ -130,25 +130,25 @@ nano().tz('Asia/Tokyo')                  // Tokyo time
 ## 📦 Installation
 
 ```bash
-npm install nanodate
+npm install @qantesm/nanodate
 ```
 
 ```bash
-yarn add nanodate
+yarn add @qantesm/nanodate
 ```
 
 ```bash
-pnpm add nanodate
+pnpm add @qantesm/nanodate
 ```
 
 ### Choose Your Bundle
 
 ```javascript
 // Full features (~2.5KB gzipped)
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 // Minimal core (< 1KB gzipped)
-import { nano } from 'nanodate/lite';
+import { nano } from '@qantesm/nanodate/lite';
 ```
 
 ---
@@ -156,7 +156,7 @@ import { nano } from 'nanodate/lite';
 ## ⚡ Quick Start
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 // Current date
 nano().format('YYYY-MM-DD');  // "2026-01-21"
@@ -193,7 +193,7 @@ nano().tz('Asia/Tokyo');        // Tokyo time
 ### Creating Dates
 
 ```javascript
-import { nano, utc, fromUnix } from 'nanodate';
+import { nano, utc, fromUnix } from '@qantesm/nanodate';
 
 nano()                      // Now
 nano('2026-01-21')          // ISO string
@@ -314,7 +314,7 @@ nano().tz('Asia/Tokyo');          // Tokyo time
 nano().tz('Europe/London', 'full'); // Full format in London
 
 // Get current timezone
-import { getTimezone } from 'nanodate';
+import { getTimezone } from '@qantesm/nanodate';
 getTimezone();  // "Europe/Istanbul"
 
 // Get UTC offset
@@ -370,7 +370,7 @@ apk add icu-data-full
 <summary><strong>Checking Intl Support Programmatically</strong></summary>
 
 ```javascript
-import { checkIntlSupport } from 'nanodate';
+import { checkIntlSupport } from '@qantesm/nanodate';
 
 if (!checkIntlSupport()) {
   console.warn('Limited locale support detected');
@@ -415,11 +415,11 @@ Only import what you need:
 
 ```javascript
 // Only format? ~500 bytes
-import { nano } from 'nanodate/lite';
+import { nano } from '@qantesm/nanodate/lite';
 nano().format('YYYY-MM-DD');
 
 // Full library with relative time, timezone, etc.? ~2.5KB
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 ```
 
 ---
@@ -429,7 +429,7 @@ import { nano } from 'nanodate';
 ### 📅 Calendar Application
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 // Get all days in current month
 const today = nano();
@@ -450,7 +450,7 @@ console.log(weekDays); // ["Sun", "Mon", "Tue", ...] or localized
 ### 🛒 E-Commerce: Order Tracking
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 const order = {
   createdAt: '2026-01-18T10:30:00Z',
@@ -475,7 +475,7 @@ console.log(`Teslimat: ${delivery.format('DD MMMM dddd')}`);
 ### 💬 Chat Application: Message Timestamps
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 function formatMessageTime(timestamp, userLocale) {
   const msg = nano(timestamp, userLocale);
@@ -504,7 +504,7 @@ formatMessageTime('2026-01-10T10:00:00', 'tr'); // "10 Oca 2026"
 ### 📊 Dashboard: Analytics Date Ranges
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 function getDateRange(period) {
   const now = nano();
@@ -546,7 +546,7 @@ console.log(`${range.start.format('YYYY-MM-DD')} to ${range.end.format('YYYY-MM-
 ### 🌍 Multi-Timezone Meeting Scheduler
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 function showMeetingTimes(meetingTimeUTC) {
   const meeting = nano(meetingTimeUTC);
@@ -575,7 +575,7 @@ showMeetingTimes('2026-01-25T15:00:00Z');
 ### 🎂 Birthday/Age Calculator
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 function getAge(birthdate) {
   const birth = nano(birthdate);
@@ -611,7 +611,7 @@ console.log(getNextBirthday('1990-05-15', 'tr'));
 ### ⏰ Countdown Timer
 
 ```javascript
-import { nano } from 'nanodate';
+import { nano } from '@qantesm/nanodate';
 
 function countdown(targetDate, locale) {
   const target = nano(targetDate);
@@ -673,7 +673,10 @@ MIT © [Muhammet Ali Büyük](https://github.com/qantesm)
 
 <p align="center">
   <a href="https://github.com/qantesm/nanodate">GitHub</a> •
-  <a href="https://www.npmjs.com/package/nanodate">npm</a> •
+  <a href="https://www.npmjs.com/package/@qantesm/nanodate">npm</a> •
   <a href="https://stackblitz.com/edit/nanodate-playground">Playground</a>
 </p>
+
+
+
 

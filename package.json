@@ -1,5 +1,5 @@
 {
-    "name": "nanodate",
+    "name": "@qantesm/nanodate",
     "version": "0.1.0",
     "description": "World's smallest date library. Zero-locale-payload. Intl-native.",
     "main": "dist/nanodate.cjs.js",
