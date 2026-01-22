@@ -99,6 +99,12 @@ class BatchContext {
                 d.setMonth(0, 1);
                 d.setHours(0, 0, 0, 0);
                 break;
+            case 'quarter': {
+                const quarterMonth = Math.floor(d.getMonth() / 3) * 3;
+                d.setMonth(quarterMonth, 1);
+                d.setHours(0, 0, 0, 0);
+                break;
+            }
             case 'month':
                 d.setDate(1);
                 d.setHours(0, 0, 0, 0);
@@ -106,6 +112,13 @@ class BatchContext {
             case 'week': {
                 const day = d.getDay();
                 d.setDate(d.getDate() - day);
+                d.setHours(0, 0, 0, 0);
+                break;
+            }
+            case 'isoWeek': {
+                const day = d.getDay();
+                const diff = day === 0 ? -6 : 1 - day;
+                d.setDate(d.getDate() + diff);
                 d.setHours(0, 0, 0, 0);
                 break;
             }
@@ -137,6 +150,13 @@ class BatchContext {
                 d.setMonth(11, 31);
                 d.setHours(23, 59, 59, 999);
                 break;
+            case 'quarter': {
+                const quarterEndMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+                const lastDay = getDaysInMonth(d.getFullYear(), quarterEndMonth);
+                d.setMonth(quarterEndMonth, lastDay);
+                d.setHours(23, 59, 59, 999);
+                break;
+            }
             case 'month': {
                 const lastDay = getDaysInMonth(d.getFullYear(), d.getMonth());
                 d.setDate(lastDay);
@@ -306,8 +326,10 @@ export const raw = {
  */
 const UNIT_MAP = Object.freeze({
     y: 'year', year: 'year', years: 'year',
+    Q: 'quarter', quarter: 'quarter', quarters: 'quarter',
     M: 'month', month: 'month', months: 'month',
     w: 'week', week: 'week', weeks: 'week',
+    isoWeek: 'isoWeek', isoWeeks: 'isoWeek',
     d: 'day', day: 'day', days: 'day',
     h: 'hour', hour: 'hour', hours: 'hour',
     m: 'minute', minute: 'minute', minutes: 'minute',
@@ -429,11 +451,23 @@ export const startOf = (ctx, unit) => {
     switch (u) {
         case 'year':
             return nano(new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0), ctx._l);
+        case 'quarter': {
+            // Q1: 0-2, Q2: 3-5, Q3: 6-8, Q4: 9-11
+            const quarterMonth = Math.floor(d.getMonth() / 3) * 3;
+            return nano(new Date(d.getFullYear(), quarterMonth, 1, 0, 0, 0, 0), ctx._l);
+        }
         case 'month':
             return nano(new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0), ctx._l);
         case 'week': {
             const day = d.getDay();
             const newDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day, 0, 0, 0, 0);
+            return nano(newDate, ctx._l);
+        }
+        case 'isoWeek': {
+            // ISO week: Pazartesi başlangıç
+            const day = d.getDay();
+            const diff = day === 0 ? -6 : 1 - day; // Pazartesi'ye git
+            const newDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff, 0, 0, 0, 0);
             return nano(newDate, ctx._l);
         }
         case 'day':
@@ -470,6 +504,12 @@ export const endOf = (ctx, unit) => {
     switch (u) {
         case 'year':
             return nano(new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999), ctx._l);
+        case 'quarter': {
+            // Q1: Mart 31, Q2: Haziran 30, Q3: Eylül 30, Q4: Aralık 31
+            const quarterEndMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+            const lastDay = getDaysInMonth(d.getFullYear(), quarterEndMonth);
+            return nano(new Date(d.getFullYear(), quarterEndMonth, lastDay, 23, 59, 59, 999), ctx._l);
+        }
         case 'month': {
             // Get last day of month using day 0 of next month
             const lastDay = getDaysInMonth(d.getFullYear(), d.getMonth());
@@ -478,6 +518,12 @@ export const endOf = (ctx, unit) => {
         case 'week': {
             const day = d.getDay();
             return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (6 - day), 23, 59, 59, 999), ctx._l);
+        }
+        case 'isoWeek': {
+            // ISO week: Pazar sonu
+            const day = d.getDay();
+            const diff = day === 0 ? 0 : 7 - day; // Pazar'a git
+            return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff, 23, 59, 59, 999), ctx._l);
         }
         case 'day':
             return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999), ctx._l);

@@ -1,6 +1,6 @@
 {
     "name": "@qantesm/nanodate",
-    "version": "0.1.7",
+    "version": "0.2.1",
     "description": "World's smallest date library. Zero-locale-payload. Intl-native.",
     "type": "module",
     "main": "dist/nanodate.cjs.js",
@@ -34,7 +34,7 @@
     "size-limit": [
         {
             "path": "dist/nanodate.esm.js",
-            "limit": "8 KB",
+            "limit": "10 KB",
             "name": "Full bundle"
         },
         {

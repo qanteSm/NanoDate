@@ -983,4 +983,257 @@ describe('NanoDate v0.1.6 New Features', () => {
             expect(result).toBe('January 2026');
         });
     });
+
+    // ============================================
+    // NEW FEATURE TESTS
+    // ============================================
+
+    describe('Chainable Setters', () => {
+        it('should set year and return NanoDate', () => {
+            const date = nano('2026-01-21').year(2030);
+            expect(date.year()).toBe(2030);
+            expect(date.month()).toBe(0);
+            expect(date.date()).toBe(21);
+        });
+
+        it('should chain multiple setters', () => {
+            const date = nano('2026-01-21')
+                .year(2030)
+                .month(5)
+                .date(15);
+            expect(date.year()).toBe(2030);
+            expect(date.month()).toBe(5);
+            expect(date.date()).toBe(15);
+        });
+
+        it('should chain setter with manipulation', () => {
+            const date = nano('2026-01-21')
+                .month(3)
+                .startOf('month');
+            expect(date.month()).toBe(3);
+            expect(date.date()).toBe(1);
+            expect(date.hour()).toBe(0);
+        });
+
+        it('should set time components', () => {
+            const date = nano('2026-01-21T10:30:00')
+                .hour(14)
+                .minute(45)
+                .second(30);
+            expect(date.hour()).toBe(14);
+            expect(date.minute()).toBe(45);
+            expect(date.second()).toBe(30);
+        });
+
+        it('getter should still work without argument', () => {
+            const date = nano('2026-03-15');
+            expect(date.year()).toBe(2026);
+            expect(date.month()).toBe(2);
+            expect(date.date()).toBe(15);
+        });
+    });
+
+    describe('Quarter Support', () => {
+        it('should return correct quarter', () => {
+            expect(nano('2026-01-15').quarter()).toBe(1);
+            expect(nano('2026-04-15').quarter()).toBe(2);
+            expect(nano('2026-07-15').quarter()).toBe(3);
+            expect(nano('2026-10-15').quarter()).toBe(4);
+        });
+
+        it('should get start of quarter', () => {
+            // Q1
+            let date = nano('2026-02-15').startOf('quarter');
+            expect(date.month()).toBe(0);
+            expect(date.date()).toBe(1);
+            
+            // Q2
+            date = nano('2026-05-20').startOf('quarter');
+            expect(date.month()).toBe(3);
+            expect(date.date()).toBe(1);
+            
+            // Q3
+            date = nano('2026-08-10').startOf('quarter');
+            expect(date.month()).toBe(6);
+            expect(date.date()).toBe(1);
+            
+            // Q4
+            date = nano('2026-11-25').startOf('quarter');
+            expect(date.month()).toBe(9);
+            expect(date.date()).toBe(1);
+        });
+
+        it('should get end of quarter', () => {
+            // Q1 ends March 31
+            let date = nano('2026-02-15').endOf('quarter');
+            expect(date.month()).toBe(2);
+            expect(date.date()).toBe(31);
+            expect(date.hour()).toBe(23);
+            
+            // Q2 ends June 30
+            date = nano('2026-05-20').endOf('quarter');
+            expect(date.month()).toBe(5);
+            expect(date.date()).toBe(30);
+            
+            // Q3 ends September 30
+            date = nano('2026-08-10').endOf('quarter');
+            expect(date.month()).toBe(8);
+            expect(date.date()).toBe(30);
+            
+            // Q4 ends December 31
+            date = nano('2026-11-25').endOf('quarter');
+            expect(date.month()).toBe(11);
+            expect(date.date()).toBe(31);
+        });
+    });
+
+    describe('ISO Weekday', () => {
+        it('should return ISO weekday (1-7)', () => {
+            // 2026-01-19 is Monday
+            expect(nano('2026-01-19').isoWeekday()).toBe(1);
+            // 2026-01-20 is Tuesday
+            expect(nano('2026-01-20').isoWeekday()).toBe(2);
+            // 2026-01-21 is Wednesday
+            expect(nano('2026-01-21').isoWeekday()).toBe(3);
+            // 2026-01-25 is Sunday
+            expect(nano('2026-01-25').isoWeekday()).toBe(7);
+        });
+
+        it('should set ISO weekday', () => {
+            // Start from Wednesday 2026-01-21
+            const wed = nano('2026-01-21');
+            
+            // Set to Monday (1)
+            const mon = wed.isoWeekday(1);
+            expect(mon.isoWeekday()).toBe(1);
+            expect(mon.date()).toBe(19);
+            
+            // Set to Friday (5)
+            const fri = wed.isoWeekday(5);
+            expect(fri.isoWeekday()).toBe(5);
+            expect(fri.date()).toBe(23);
+            
+            // Set to Sunday (7)
+            const sun = wed.isoWeekday(7);
+            expect(sun.isoWeekday()).toBe(7);
+            expect(sun.date()).toBe(25);
+        });
+    });
+
+    describe('ISO Week', () => {
+        it('should get ISO week number', () => {
+            // Week 1 of 2026
+            expect(nano('2026-01-01').isoWeek()).toBe(1);
+            expect(nano('2026-01-04').isoWeek()).toBe(1);
+            
+            // Week 4
+            expect(nano('2026-01-21').isoWeek()).toBe(4);
+        });
+
+        it('should set ISO week', () => {
+            const date = nano('2026-01-21'); // Week 4
+            const week1 = date.isoWeek(1);
+            expect(week1.isoWeek()).toBe(1);
+        });
+
+        it('should get start of ISO week (Monday)', () => {
+            // 2026-01-21 is Wednesday
+            const date = nano('2026-01-21').startOf('isoWeek');
+            expect(date.isoWeekday()).toBe(1);
+            expect(date.date()).toBe(19); // Monday
+        });
+
+        it('should get end of ISO week (Sunday)', () => {
+            // 2026-01-21 is Wednesday
+            const date = nano('2026-01-21').endOf('isoWeek');
+            expect(date.isoWeekday()).toBe(7);
+            expect(date.date()).toBe(25); // Sunday
+        });
+    });
+
+    describe('Duration', () => {
+        it('should create duration from object', () => {
+            const d = nano.duration({ hours: 2, minutes: 30 });
+            expect(d.asMinutes()).toBe(150);
+            expect(d.hours()).toBe(2);
+            expect(d.minutes()).toBe(30);
+        });
+
+        it('should create duration from number with unit', () => {
+            const d = nano.duration(2, 'hours');
+            expect(d.asHours()).toBe(2);
+            expect(d.asMinutes()).toBe(120);
+        });
+
+        it('should create duration from milliseconds', () => {
+            const d = nano.duration(3600000);
+            expect(d.asHours()).toBe(1);
+        });
+
+        it('should parse ISO 8601 duration', () => {
+            const d = nano.duration('P1DT2H30M');
+            expect(d.days()).toBe(1);
+            expect(d.hours()).toBe(2);
+            expect(d.minutes()).toBe(30);
+        });
+
+        it('should add durations', () => {
+            const d1 = nano.duration({ hours: 1 });
+            const d2 = d1.add({ minutes: 30 });
+            expect(d2.asMinutes()).toBe(90);
+        });
+
+        it('should subtract durations', () => {
+            const d1 = nano.duration({ hours: 2 });
+            const d2 = d1.subtract({ minutes: 30 });
+            expect(d2.asMinutes()).toBe(90);
+        });
+
+        it('should humanize duration', () => {
+            const d = nano.duration({ hours: 2 });
+            const humanized = d.humanize('en');
+            expect(humanized).toContain('2');
+            expect(humanized.toLowerCase()).toContain('hour');
+        });
+
+        it('should format as ISO 8601', () => {
+            const d = nano.duration({ days: 1, hours: 2, minutes: 30 });
+            expect(d.toISOString()).toBe('P1DT2H30M');
+        });
+
+        it('should calculate duration between dates', () => {
+            const start = nano('2026-01-01');
+            const end = nano('2026-01-21');
+            const d = nano.durationBetween(start, end);
+            expect(d.asDays()).toBe(20);
+        });
+
+        it('should multiply duration', () => {
+            const d = nano.duration({ hours: 2 }).multiply(3);
+            expect(d.asHours()).toBe(6);
+        });
+
+        it('should divide duration', () => {
+            const d = nano.duration({ hours: 6 }).divide(2);
+            expect(d.asHours()).toBe(3);
+        });
+
+        it('should get absolute value', () => {
+            const d = nano.duration({ hours: -2 });
+            expect(d.isNegative()).toBe(true);
+            expect(d.abs().asHours()).toBe(2);
+        });
+
+        it('should compare durations', () => {
+            const d1 = nano.duration({ hours: 2 });
+            const d2 = nano.duration({ hours: 3 });
+            expect(d1.lessThan(d2)).toBe(true);
+            expect(d2.greaterThan(d1)).toBe(true);
+        });
+
+        it('should format duration with custom pattern', () => {
+            const d = nano.duration({ hours: 1, minutes: 30, seconds: 45 });
+            expect(d.format('HH:mm:ss')).toBe('01:30:45');
+        });
+    });
 });

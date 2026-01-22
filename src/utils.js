@@ -188,16 +188,24 @@ export const isSame = (ctx, other, unit) => {
 
 /**
  * Check if date is same or before another date
+ * Optimized: single comparison instead of calling two functions
  */
 export const isSameOrBefore = (ctx, other, unit) => {
-    return isSame(ctx, other, unit) || isBefore(ctx, other, unit);
+    if (!unit) {
+        return ctx._d.getTime() <= toTimestamp(other);
+    }
+    return truncateToUnit(ctx._d, unit) <= truncateToUnit(toDate(other), unit);
 };
 
 /**
  * Check if date is same or after another date
+ * Optimized: single comparison instead of calling two functions
  */
 export const isSameOrAfter = (ctx, other, unit) => {
-    return isSame(ctx, other, unit) || isAfter(ctx, other, unit);
+    if (!unit) {
+        return ctx._d.getTime() >= toTimestamp(other);
+    }
+    return truncateToUnit(ctx._d, unit) >= truncateToUnit(toDate(other), unit);
 };
 
 /**
@@ -410,6 +418,28 @@ const toDateString = (d) => {
 };
 
 /**
+ * Build optimized holiday lookup set
+ * @param {Array<Date|string>} holidays - Array of holiday dates
+ * @returns {Set<string>} Set of date strings in YYYY-MM-DD format
+ */
+const buildHolidaySet = (holidays) => {
+    if (!holidays || holidays.length === 0) return null;
+    
+    const set = new Set();
+    for (let i = 0; i < holidays.length; i++) {
+        const h = holidays[i];
+        if (typeof h === 'string' && h.length === 10 && h[4] === '-' && h[7] === '-') {
+            // Already YYYY-MM-DD format - fast path
+            set.add(h);
+        } else {
+            const d = h instanceof Date ? h : new Date(h);
+            set.add(toDateString(d));
+        }
+    }
+    return set;
+};
+
+/**
  * Check if a date is a business day (Mon-Fri, not a holiday)
  * 
  * @param {Object} ctx - NanoDate context
@@ -419,24 +449,17 @@ const toDateString = (d) => {
 export const isBusinessDay = (ctx, holidays = []) => {
     const dayOfWeek = ctx._d.getDay();
     
-    // Weekend check (0 = Sunday, 6 = Saturday)
+    // Weekend check (0 = Sunday, 6 = Saturday) - most common rejection
     if (dayOfWeek === 0 || dayOfWeek === 6) {
         return false;
     }
     
-    // Holiday check - use local date strings for comparison
+    // Holiday check - only if holidays provided
     if (holidays.length > 0) {
-        const dateStr = toDateString(ctx._d);
-        const holidaySet = new Set(
-            holidays.map(h => {
-                if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
-                    return h; // Already in YYYY-MM-DD format
-                }
-                const d = h instanceof Date ? h : new Date(h);
-                return toDateString(d);
-            })
-        );
-        return !holidaySet.has(dateStr);
+        const holidaySet = buildHolidaySet(holidays);
+        if (holidaySet && holidaySet.has(toDateString(ctx._d))) {
+            return false;
+        }
     }
     
     return true;
@@ -455,16 +478,8 @@ export const isBusinessDay = (ctx, holidays = []) => {
  * addBusinessDays(ctx, -3, holidays)    // Subtract 3 business days
  */
 export const addBusinessDays = (ctx, days, holidays = []) => {
-    // Build holiday set for fast lookup using local date strings
-    const holidaySet = new Set(
-        holidays.map(h => {
-            if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
-                return h;
-            }
-            const d = h instanceof Date ? h : new Date(h);
-            return toDateString(d);
-        })
-    );
+    // Build holiday set once
+    const holidaySet = buildHolidaySet(holidays);
     
     const result = new Date(ctx._d.getTime());
     let remaining = Math.abs(days);
@@ -480,8 +495,7 @@ export const addBusinessDays = (ctx, days, holidays = []) => {
         }
         
         // Skip holidays
-        const dateStr = toDateString(result);
-        if (holidaySet.has(dateStr)) {
+        if (holidaySet && holidaySet.has(toDateString(result))) {
             continue;
         }
         
@@ -508,16 +522,8 @@ export const diffBusinessDays = (ctx, other, holidays = []) => {
     const start = new Date(Math.min(ctx._d.getTime(), otherDate.getTime()));
     const end = new Date(Math.max(ctx._d.getTime(), otherDate.getTime()));
     
-    // Build holiday set for fast lookup using local date strings
-    const holidaySet = new Set(
-        holidays.map(h => {
-            if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
-                return h;
-            }
-            const d = h instanceof Date ? h : new Date(h);
-            return toDateString(d);
-        })
-    );
+    // Build holiday set once
+    const holidaySet = buildHolidaySet(holidays);
     
     let count = 0;
     const current = new Date(start.getTime());
@@ -532,8 +538,7 @@ export const diffBusinessDays = (ctx, other, holidays = []) => {
         }
         
         // Skip holidays
-        const dateStr = toDateString(current);
-        if (holidaySet.has(dateStr)) {
+        if (holidaySet && holidaySet.has(toDateString(current))) {
             continue;
         }
         

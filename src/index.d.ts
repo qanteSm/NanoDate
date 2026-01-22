@@ -11,8 +11,10 @@
  */
 export type TimeUnit =
     | 'year' | 'years' | 'y'
+    | 'quarter' | 'quarters' | 'Q'
     | 'month' | 'months' | 'M'
     | 'week' | 'weeks' | 'w'
+    | 'isoWeek' | 'isoWeeks'
     | 'day' | 'days' | 'd'
     | 'hour' | 'hours' | 'h'
     | 'minute' | 'minutes' | 'm'
@@ -262,23 +264,29 @@ export interface NanoDate {
     prevBusinessDay(holidays?: Array<Date | string>): NanoDate;
 
     // ============================================
-    // GETTERS
+    // GETTERS / SETTERS (Chainable)
     // ============================================
 
     /**
-     * Get year
+     * Get or set year
+     * @param value - If provided, sets year and returns new NanoDate
      */
     year(): number;
+    year(value: number): NanoDate;
 
     /**
-     * Get month (0-11)
+     * Get or set month (0-11)
+     * @param value - If provided, sets month and returns new NanoDate
      */
     month(): number;
+    month(value: number): NanoDate;
 
     /**
-     * Get date of month (1-31)
+     * Get or set date of month (1-31)
+     * @param value - If provided, sets date and returns new NanoDate
      */
     date(): number;
+    date(value: number): NanoDate;
 
     /**
      * Get day of week (0-6, Sunday = 0)
@@ -286,24 +294,54 @@ export interface NanoDate {
     day(): number;
 
     /**
-     * Get hour (0-23)
+     * Get or set hour (0-23)
+     * @param value - If provided, sets hour and returns new NanoDate
      */
     hour(): number;
+    hour(value: number): NanoDate;
 
     /**
-     * Get minute (0-59)
+     * Get or set minute (0-59)
+     * @param value - If provided, sets minute and returns new NanoDate
      */
     minute(): number;
+    minute(value: number): NanoDate;
 
     /**
-     * Get second (0-59)
+     * Get or set second (0-59)
+     * @param value - If provided, sets second and returns new NanoDate
      */
     second(): number;
+    second(value: number): NanoDate;
 
     /**
-     * Get millisecond (0-999)
+     * Get or set millisecond (0-999)
+     * @param value - If provided, sets millisecond and returns new NanoDate
      */
     millisecond(): number;
+    millisecond(value: number): NanoDate;
+    
+    /**
+     * Get or set ISO weekday (1-7, Monday = 1, Sunday = 7)
+     * @param value - If provided, sets ISO weekday and returns new NanoDate
+     * 
+     * @example
+     * nano().isoWeekday()        // 3 (Wednesday)
+     * nano().isoWeekday(1)       // Set to Monday
+     */
+    isoWeekday(): number;
+    isoWeekday(value: number): NanoDate;
+    
+    /**
+     * Get or set ISO week number (1-53)
+     * @param value - If provided, sets ISO week and returns new NanoDate
+     * 
+     * @example
+     * nano().isoWeek()           // 4
+     * nano().isoWeek(1)          // Set to week 1
+     */
+    isoWeek(): number;
+    isoWeek(value: number): NanoDate;
 
     // ============================================
     // CONVERSION
@@ -465,6 +503,206 @@ export interface BatchContext {
      * Get Date object without creating NanoDate
      */
     toDate(): Date;
+}
+
+/**
+ * Duration input object
+ */
+export interface DurationInput {
+    years?: number;
+    year?: number;
+    y?: number;
+    months?: number;
+    month?: number;
+    M?: number;
+    weeks?: number;
+    week?: number;
+    w?: number;
+    days?: number;
+    day?: number;
+    d?: number;
+    hours?: number;
+    hour?: number;
+    h?: number;
+    minutes?: number;
+    minute?: number;
+    m?: number;
+    seconds?: number;
+    second?: number;
+    s?: number;
+    milliseconds?: number;
+    millisecond?: number;
+    ms?: number;
+}
+
+/**
+ * Duration class for representing time intervals
+ * Immutable and chainable
+ */
+export interface Duration {
+    // ============================================
+    // TOTAL GETTERS (as float)
+    // ============================================
+    
+    /** Get total milliseconds */
+    asMilliseconds(): number;
+    
+    /** Get total seconds (float) */
+    asSeconds(): number;
+    
+    /** Get total minutes (float) */
+    asMinutes(): number;
+    
+    /** Get total hours (float) */
+    asHours(): number;
+    
+    /** Get total days (float) */
+    asDays(): number;
+    
+    /** Get total weeks (float) */
+    asWeeks(): number;
+    
+    /** Get total months (float, approximate) */
+    asMonths(): number;
+    
+    /** Get total years (float, approximate) */
+    asYears(): number;
+    
+    // ============================================
+    // COMPONENT GETTERS
+    // ============================================
+    
+    /** Get years component */
+    years(): number;
+    
+    /** Get months component (0-11) */
+    months(): number;
+    
+    /** Get days component (0-29/30) */
+    days(): number;
+    
+    /** Get hours component (0-23) */
+    hours(): number;
+    
+    /** Get minutes component (0-59) */
+    minutes(): number;
+    
+    /** Get seconds component (0-59) */
+    seconds(): number;
+    
+    /** Get milliseconds component (0-999) */
+    milliseconds(): number;
+    
+    // ============================================
+    // MANIPULATION (Chainable)
+    // ============================================
+    
+    /**
+     * Add to this duration
+     * @returns New Duration instance
+     */
+    add(value: number | DurationInput | Duration, unit?: TimeUnit): Duration;
+    
+    /**
+     * Subtract from this duration
+     * @returns New Duration instance
+     */
+    subtract(value: number | DurationInput | Duration, unit?: TimeUnit): Duration;
+    
+    /**
+     * Multiply duration
+     * @returns New Duration instance
+     */
+    multiply(factor: number): Duration;
+    
+    /**
+     * Divide duration
+     * @returns New Duration instance
+     */
+    divide(divisor: number): Duration;
+    
+    /**
+     * Get absolute value
+     * @returns New Duration with positive value
+     */
+    abs(): Duration;
+    
+    /**
+     * Negate duration
+     * @returns New Duration with opposite sign
+     */
+    negate(): Duration;
+    
+    // ============================================
+    // COMPARISON
+    // ============================================
+    
+    /** Check if duration is negative */
+    isNegative(): boolean;
+    
+    /** Check if duration is zero */
+    isZero(): boolean;
+    
+    /** Check if duration is positive */
+    isPositive(): boolean;
+    
+    /** Compare with another duration (-1, 0, or 1) */
+    compare(other: Duration | number): number;
+    
+    /** Check if equal to another duration */
+    equals(other: Duration | number): boolean;
+    
+    /** Check if greater than another duration */
+    greaterThan(other: Duration | number): boolean;
+    
+    /** Check if less than another duration */
+    lessThan(other: Duration | number): boolean;
+    
+    // ============================================
+    // FORMATTING
+    // ============================================
+    
+    /**
+     * Convert to object representation
+     */
+    toObject(): {
+        years: number;
+        months: number;
+        days: number;
+        hours: number;
+        minutes: number;
+        seconds: number;
+        milliseconds: number;
+    };
+    
+    /**
+     * Format as ISO 8601 duration string
+     * @returns ISO duration string (e.g., "P1DT2H30M")
+     */
+    toISOString(): string;
+    
+    /**
+     * Human-readable format (locale-aware)
+     * @param locale - Locale for formatting
+     * @returns Human readable string (e.g., "2 hours")
+     */
+    humanize(locale?: string): string;
+    
+    /**
+     * Format with custom pattern
+     * @param format - Format pattern (HH:mm:ss, etc.)
+     * @returns Formatted string
+     */
+    format(format?: string): string;
+    
+    /** Get timestamp value */
+    valueOf(): number;
+    
+    /** String representation (ISO 8601) */
+    toString(): string;
+    
+    /** JSON representation (ISO 8601) */
+    toJSON(): string;
 }
 
 /**
@@ -652,6 +890,33 @@ export namespace nano {
      * nano.raw.diffDays(ts1, ts2)      // Get day difference
      */
     const raw: RawOperations;
+    
+    /**
+     * Create a duration from various inputs
+     * 
+     * @param input - Duration input (ms, object, or ISO string)
+     * @param unit - Unit if input is number
+     * @returns Duration instance
+     * 
+     * @example
+     * nano.duration(5000)                       // 5 seconds in ms
+     * nano.duration(2, 'hours')                 // 2 hours
+     * nano.duration({ hours: 2, minutes: 30 }) // 2 hours 30 minutes
+     * nano.duration('P1DT2H30M')                // ISO 8601 duration
+     */
+    function duration(input: number | DurationInput | string, unit?: TimeUnit): Duration;
+    
+    /**
+     * Calculate duration between two dates
+     * 
+     * @param start - Start date
+     * @param end - End date
+     * @returns Duration between dates
+     * 
+     * @example
+     * nano.durationBetween(nano('2026-01-01'), nano('2026-01-21'))
+     */
+    function durationBetween(start: DateInput, end: DateInput): Duration;
 }
 
 /**
@@ -697,6 +962,28 @@ export function resetConfig(): void;
  * @returns true if full Intl support is available
  */
 export function checkIntlSupport(): boolean;
+
+/**
+ * Create a duration from various inputs
+ * 
+ * @param input - Duration input (ms, object, or ISO string)
+ * @param unit - Unit if input is number
+ * @returns Duration instance
+ */
+export function duration(input: number | DurationInput | string, unit?: TimeUnit): Duration;
+
+/**
+ * Calculate duration between two dates
+ */
+export function durationBetween(start: DateInput, end: DateInput): Duration;
+
+/**
+ * Duration class (for instanceof checks)
+ */
+export const Duration: {
+    new(input: number | DurationInput): Duration;
+    toMilliseconds(obj: DurationInput): number;
+};
 
 // Default export
 export default nano;
