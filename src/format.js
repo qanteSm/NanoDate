@@ -18,6 +18,33 @@
  */
 
 /**
+ * Zero-pad a number to specified width
+ */
+const pad = (n, width = 2) => String(n).padStart(width, '0');
+
+/**
+ * Precompiled format functions for common patterns
+ * These bypass regex parsing for maximum performance
+ */
+const PRECOMPILED = {
+    'YYYY-MM-DD': (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    'YYYY-MM-DDTHH:mm:ss': (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+    'YYYY-MM-DDTHH:mm:ssZ': (d) => {
+        const offset = -d.getTimezoneOffset();
+        const sign = offset >= 0 ? '+' : '-';
+        const absOffset = Math.abs(offset);
+        const hours = pad(Math.floor(absOffset / 60));
+        const minutes = pad(absOffset % 60);
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${hours}:${minutes}`;
+    },
+    'DD/MM/YYYY': (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+    'MM/DD/YYYY': (d) => `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}`,
+    'HH:mm': (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    'HH:mm:ss': (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+    'ISO': (d) => d.toISOString()
+};
+
+/**
  * Token to Intl.DateTimeFormat options mapping
  * Ultra-compact, her token tek bir Intl option'a karşılık gelir
  */
@@ -51,6 +78,13 @@ const T = {
  * Intl.DateTimeFormat instances are expensive to create
  */
 const formatterCache = new Map();
+const MAX_FORMATTER_CACHE = 200;
+
+/**
+ * Parsed token cache for format strings
+ */
+const tokenCache = new Map();
+const MAX_TOKEN_CACHE = 100;
 
 /**
  * Get cached Intl.DateTimeFormat instance
@@ -62,6 +96,11 @@ const getFormatter = (locale, options) => {
     const key = locale + JSON.stringify(options);
     let formatter = formatterCache.get(key);
     if (!formatter) {
+        // Limit cache size
+        if (formatterCache.size >= MAX_FORMATTER_CACHE) {
+            const firstKey = formatterCache.keys().next().value;
+            formatterCache.delete(firstKey);
+        }
         formatter = new Intl.DateTimeFormat(locale, options);
         formatterCache.set(key, formatter);
     }
@@ -132,14 +171,128 @@ const getOffset = (date, withColon) => {
 /**
  * Token regex pattern
  * Order matters: longer tokens first (YYYY before YY, etc.)
+ * Compiled once at module load for performance
  */
 const TOKEN_REGEX = /\[([^\]]+)]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|dd|HH|H|hh|h|mm|m|ss|s|SSS|A|a|ZZ|Z/g;
+
+/**
+ * Parse format string into tokens (cached)
+ * @param {string} fmt - Format string
+ * @returns {Array} Array of token objects
+ */
+const parseFormatTokens = (fmt) => {
+    if (tokenCache.has(fmt)) {
+        return tokenCache.get(fmt);
+    }
+    
+    const tokens = [];
+    let lastIndex = 0;
+    let match;
+    
+    // Reset regex state
+    TOKEN_REGEX.lastIndex = 0;
+    
+    while ((match = TOKEN_REGEX.exec(fmt)) !== null) {
+        // Add literal text before this match
+        if (match.index > lastIndex) {
+            tokens.push({ type: 'literal', value: fmt.slice(lastIndex, match.index) });
+        }
+        
+        // Add token
+        if (match[0][0] === '[') {
+            // Escaped text
+            tokens.push({ type: 'literal', value: match[1] });
+        } else {
+            tokens.push({ type: 'token', value: match[0] });
+        }
+        
+        lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining literal text
+    if (lastIndex < fmt.length) {
+        tokens.push({ type: 'literal', value: fmt.slice(lastIndex) });
+    }
+    
+    // Limit cache size
+    if (tokenCache.size >= MAX_TOKEN_CACHE) {
+        const firstKey = tokenCache.keys().next().value;
+        tokenCache.delete(firstKey);
+    }
+    
+    tokenCache.set(fmt, tokens);
+    return tokens;
+};
+
+/**
+ * Format a single token
+ * @param {string} token - Token to format
+ * @param {Date} date - Date object
+ * @param {string} locale - Locale string
+ * @returns {string} Formatted value
+ */
+const formatToken = (token, date, locale) => {
+    // Ordinal day: Do (1st, 2nd, 3rd...)
+    if (token === 'Do') {
+        return ord(date.getDate());
+    }
+
+    // AM/PM
+    if (token === 'A') {
+        return getAmPm(date, locale, true);
+    }
+    if (token === 'a') {
+        return getAmPm(date, locale, false);
+    }
+
+    // Timezone offset
+    if (token === 'Z') {
+        return getOffset(date, true);
+    }
+    if (token === 'ZZ') {
+        return getOffset(date, false);
+    }
+
+    // 12-hour format - extract only hour value (no AM/PM)
+    if (token === 'hh' || token === 'h') {
+        const formatter = getFormatter(locale, {
+            hour: 'numeric',
+            hour12: true
+        });
+        const parts = formatter.formatToParts(date);
+        const hourPart = parts.find(p => p.type === 'hour');
+        if (hourPart) {
+            return token === 'hh' ? hourPart.value.padStart(2, '0') : hourPart.value;
+        }
+        // Fallback
+        let hour = date.getHours() % 12;
+        if (hour === 0) hour = 12;
+        return token === 'hh' ? String(hour).padStart(2, '0') : String(hour);
+    }
+
+    // Standard token - Intl.DateTimeFormat kullan
+    const opt = T[token];
+    if (!opt) return token;
+
+    try {
+        const formatted = getFormatter(locale, opt).format(date);
+
+        // 2-digit padding for HH, mm, ss
+        if (token === 'HH' || token === 'mm' || token === 'ss') {
+            return formatted.padStart(2, '0');
+        }
+
+        return formatted;
+    } catch {
+        return token;
+    }
+};
 
 /**
  * Format a NanoDate using a format string or preset
  * 
  * @param {Object} ctx - NanoDate context (_d: Date, _l: locale)
- * @param {string} [fmt='YYYY-MM-DDTHH:mm:ss'] - Format string or preset
+ * @param {string} [fmt='YYYY-MM-DDTHH:mm:ssZ'] - Format string or preset
  * @returns {string} Formatted date string
  * 
  * @example
@@ -151,6 +304,11 @@ const TOKEN_REGEX = /\[([^\]]+)]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|dd|HH|H|
 export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
     const locale = getLocale(ctx);
     const date = ctx._d;
+
+    // Check for precompiled format first (fastest path)
+    if (PRECOMPILED[fmt]) {
+        return PRECOMPILED[fmt](date);
+    }
 
     // Preset format kontrolü (short, medium, long, full)
     if (PRESETS.includes(fmt)) {
@@ -168,71 +326,19 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
         }
     }
 
-    // Token-based formatting
-    return fmt.replace(TOKEN_REGEX, (match) => {
-        // Escaped text: [text]
-        if (match[0] === '[') {
-            return match.slice(1, -1);
+    // Token-based formatting with caching
+    const tokens = parseFormatTokens(fmt);
+    let result = '';
+    
+    for (const token of tokens) {
+        if (token.type === 'literal') {
+            result += token.value;
+        } else {
+            result += formatToken(token.value, date, locale);
         }
-
-        // Ordinal day: Do (1st, 2nd, 3rd...)
-        if (match === 'Do') {
-            return ord(date.getDate());
-        }
-
-        // AM/PM
-        if (match === 'A') {
-            return getAmPm(date, locale, true);
-        }
-        if (match === 'a') {
-            return getAmPm(date, locale, false);
-        }
-
-        // Timezone offset
-        if (match === 'Z') {
-            return getOffset(date, true);
-        }
-        if (match === 'ZZ') {
-            return getOffset(date, false);
-        }
-
-        // 12-hour format - extract only hour value (no AM/PM)
-        if (match === 'hh' || match === 'h') {
-            const formatter = getFormatter(locale, {
-                hour: 'numeric',
-                hour12: true
-            });
-            const parts = formatter.formatToParts(date);
-            const hourPart = parts.find(p => p.type === 'hour');
-            if (hourPart) {
-                return match === 'hh' ? hourPart.value.padStart(2, '0') : hourPart.value;
-            }
-            // Fallback
-            let hour = date.getHours() % 12;
-            if (hour === 0) hour = 12;
-            return match === 'hh' ? String(hour).padStart(2, '0') : String(hour);
-        }
-
-        // Standard token - Intl.DateTimeFormat kullan
-        const opt = T[match];
-        if (!opt) return match;
-
-        try {
-            const formatted = getFormatter(locale, opt).format(date);
-
-            // 2-digit padding for HH, mm, ss
-            if (match === 'HH') {
-                return formatted.padStart(2, '0');
-            }
-            if (match === 'mm' || match === 'ss') {
-                return formatted.padStart(2, '0');
-            }
-
-            return formatted;
-        } catch {
-            return match;
-        }
-    });
+    }
+    
+    return result;
 };
 
 /**

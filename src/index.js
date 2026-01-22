@@ -9,8 +9,28 @@
 import { format } from './format.js';
 import { fromNow, toNow } from './relative.js';
 import { add, subtract, startOf, endOf, set, init as initManipulate } from './manipulate.js';
-import { diff, isBefore, isAfter, isSame, isSameOrBefore, isSameOrAfter, isBetween, isValid, isLeapYear, daysInMonth, dayOfYear, week, quarter } from './utils.js';
-import { tz, utcOffset } from './timezone.js';
+import { diff, isBefore, isAfter, isSame, isSameOrBefore, isSameOrAfter, isBetween, isValid, isLeapYear, daysInMonth, dayOfYear, week, quarter, isBusinessDay, addBusinessDays, diffBusinessDays, nextBusinessDay, prevBusinessDay, initUtils } from './utils.js';
+import { tz, tzChainable, utcOffset, toTimezone, getTimezone, initTimezone } from './timezone.js';
+
+/**
+ * Global configuration
+ */
+let globalConfig = {
+    strict: false,
+    locale: null,
+    timezone: null
+};
+
+/**
+ * Custom error for invalid dates in strict mode
+ */
+export class InvalidDateError extends Error {
+    constructor(input) {
+        super(`Invalid date: ${input}`);
+        this.name = 'InvalidDateError';
+        this.input = input;
+    }
+}
 
 /**
  * Plugin registry for extending NanoDate
@@ -54,6 +74,17 @@ const methods = {
     quarter,
     tz,
     utcOffset,
+
+    // Chainable timezone method
+    toTz: tzChainable,
+    timezone: tzChainable,
+
+    // Business day methods
+    isBusinessDay,
+    addBusinessDays,
+    diffBusinessDays,
+    nextBusinessDay,
+    prevBusinessDay,
 
     // Native Date metodları için pass-through
     toISOString: (ctx) => ctx._d.toISOString(),
@@ -126,22 +157,78 @@ const handler = {
  */
 export const nano = (input, locale) => {
     let d;
+    let originalInput = input;
 
     // Input türüne göre Date oluştur
     if (input === undefined || input === null) {
         d = new Date();
+        originalInput = undefined;
     } else if (input._d) {
         // Başka bir NanoDate instance'ı
         d = new Date(input._d);
         locale = locale || input._l;
+        originalInput = input._input;
     } else if (input instanceof Date) {
         d = new Date(input);
+        originalInput = undefined; // Date objects don't need string validation
     } else {
         d = new Date(input);
     }
 
+    // Strict mode check
+    if (globalConfig.strict && typeof originalInput === 'string') {
+        const ctx = { _d: d, _l: locale, _input: originalInput };
+        if (!isValid(ctx)) {
+            throw new InvalidDateError(originalInput);
+        }
+    }
+
     // Proxy ile wrap et
-    return new Proxy({ _d: d, _l: locale }, handler);
+    return new Proxy({ _d: d, _l: locale, _input: originalInput }, handler);
+};
+
+/**
+ * Strict mode factory - throws on invalid dates
+ * 
+ * @param {Date|string|number} input - Date input
+ * @param {string} [locale] - Locale
+ * @returns {Proxy} NanoDate instance
+ * @throws {InvalidDateError} If date is invalid
+ */
+export const strict = (input, locale) => {
+    const d = new Date(input);
+    const ctx = { _d: d, _l: locale, _input: typeof input === 'string' ? input : undefined };
+    
+    if (!isValid(ctx)) {
+        throw new InvalidDateError(input);
+    }
+    
+    return new Proxy(ctx, handler);
+};
+
+/**
+ * Configure global settings
+ * 
+ * @param {Object} options - Configuration options
+ * @param {boolean} [options.strict] - Enable strict mode globally
+ * @param {string} [options.locale] - Default locale
+ * @param {string} [options.timezone] - Default timezone
+ */
+export const config = (options) => {
+    if (options.strict !== undefined) globalConfig.strict = options.strict;
+    if (options.locale !== undefined) globalConfig.locale = options.locale;
+    if (options.timezone !== undefined) globalConfig.timezone = options.timezone;
+};
+
+/**
+ * Reset configuration to defaults
+ */
+export const resetConfig = () => {
+    globalConfig = {
+        strict: false,
+        locale: null,
+        timezone: null
+    };
 };
 
 /**
@@ -198,6 +285,14 @@ export const checkIntlSupport = () => {
 
 // Initialize modules with circular dependencies
 initManipulate(nano);
+initTimezone(nano);
+initUtils(nano);
+
+// Attach static methods to nano
+nano.strict = strict;
+nano.config = config;
+nano.resetConfig = resetConfig;
+nano.extend = extend;
 
 // Default export
 export default nano;

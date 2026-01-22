@@ -171,6 +171,7 @@ export interface NanoDate {
 
     /**
      * Check if date is valid
+     * Now includes calendar validation (e.g., Feb 30 returns false)
      */
     isValid(): boolean;
 
@@ -192,10 +193,73 @@ export interface NanoDate {
     tz(timezone: string, format?: PresetFormat | `${PresetFormat}-time`): string;
 
     /**
+     * Chainable timezone method - returns NanoDate for chaining
+     * @param timezone - IANA timezone
+     * @returns New NanoDate instance with timezone context
+     * 
+     * @example
+     * nano().toTz('America/New_York').add(1, 'day').format('YYYY-MM-DD')
+     */
+    toTz(timezone: string): NanoDate;
+
+    /**
+     * Alias for toTz - chainable timezone method
+     */
+    timezone(timezone: string): NanoDate;
+
+    /**
      * Get UTC offset in minutes
+     * @param timezone - Optional specific timezone
      * @returns UTC offset in minutes (e.g., 180 for UTC+3)
      */
-    utcOffset(): number;
+    utcOffset(timezone?: string): number;
+
+    // ============================================
+    // BUSINESS DAYS
+    // ============================================
+
+    /**
+     * Check if date is a business day (Mon-Fri, not a holiday)
+     * @param holidays - Optional array of holiday dates to exclude
+     * @returns True if business day
+     * 
+     * @example
+     * nano().isBusinessDay()               // Check if weekday
+     * nano().isBusinessDay(['2026-01-01']) // Exclude holidays
+     */
+    isBusinessDay(holidays?: Array<Date | string>): boolean;
+
+    /**
+     * Add business days (skips weekends and holidays)
+     * @param days - Number of business days to add (can be negative)
+     * @param holidays - Optional array of holiday dates
+     * @returns New NanoDate instance
+     * 
+     * @example
+     * nano().addBusinessDays(5)            // Add 5 business days
+     * nano().addBusinessDays(-3)           // Subtract 3 business days
+     */
+    addBusinessDays(days: number, holidays?: Array<Date | string>): NanoDate;
+
+    /**
+     * Calculate business days between two dates
+     * @param other - End date
+     * @param holidays - Optional array of holiday dates
+     * @returns Number of business days
+     */
+    diffBusinessDays(other: DateInput, holidays?: Array<Date | string>): number;
+
+    /**
+     * Get next business day
+     * @param holidays - Optional array of holiday dates
+     */
+    nextBusinessDay(holidays?: Array<Date | string>): NanoDate;
+
+    /**
+     * Get previous business day
+     * @param holidays - Optional array of holiday dates
+     */
+    prevBusinessDay(holidays?: Array<Date | string>): NanoDate;
 
     // ============================================
     // GETTERS
@@ -294,6 +358,27 @@ export interface NanoDate {
 }
 
 /**
+ * NanoDate configuration options
+ */
+export interface NanoDateConfig {
+    /** Enable strict mode globally - throws on invalid dates */
+    strict?: boolean;
+    /** Default locale for formatting */
+    locale?: string;
+    /** Default timezone */
+    timezone?: string;
+}
+
+/**
+ * Custom error thrown in strict mode for invalid dates
+ */
+export class InvalidDateError extends Error {
+    name: 'InvalidDateError';
+    input: any;
+    constructor(input: any);
+}
+
+/**
  * Create a NanoDate instance
  * 
  * @param input - Date input (Date, string, number, or another NanoDate)
@@ -309,6 +394,39 @@ export interface NanoDate {
  * nano('2026-01-21', 'ja')      // With Japanese locale
  */
 export function nano(input?: DateInput, locale?: string): NanoDate;
+
+export namespace nano {
+    /**
+     * Create NanoDate in strict mode - throws on invalid dates
+     * @throws {InvalidDateError} If date is invalid
+     * 
+     * @example
+     * nano.strict('2026-02-30')  // throws InvalidDateError
+     * nano.strict('2026-01-21')  // works fine
+     */
+    function strict(input: DateInput, locale?: string): NanoDate;
+
+    /**
+     * Configure global NanoDate settings
+     * 
+     * @example
+     * nano.config({ strict: true })  // Enable strict mode globally
+     * nano.config({ locale: 'tr' })  // Set default locale
+     */
+    function config(options: NanoDateConfig): void;
+
+    /**
+     * Reset configuration to defaults
+     */
+    function resetConfig(): void;
+
+    /**
+     * Extend NanoDate with a plugin
+     * @param name - Method name
+     * @param fn - Method implementation
+     */
+    function extend(name: string, fn: (ctx: any, ...args: any[]) => any): void;
+}
 
 /**
  * Create a NanoDate in UTC mode
@@ -329,6 +447,22 @@ export function utc(input?: DateInput): NanoDate;
  * fromUnix(1737452400)          // From Unix seconds
  */
 export function fromUnix(timestamp: number, locale?: string): NanoDate;
+
+/**
+ * Create NanoDate in strict mode
+ * @throws {InvalidDateError} If date is invalid
+ */
+export function strict(input: DateInput, locale?: string): NanoDate;
+
+/**
+ * Configure global NanoDate settings
+ */
+export function config(options: NanoDateConfig): void;
+
+/**
+ * Reset configuration to defaults
+ */
+export function resetConfig(): void;
 
 /**
  * Check Intl API support in current environment

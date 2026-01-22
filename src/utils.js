@@ -4,6 +4,18 @@
  */
 
 /**
+ * Factory placeholder for circular dependency
+ */
+let nanoFactory;
+
+/**
+ * Initialize with nano factory
+ */
+export const initUtils = (factory) => {
+    nanoFactory = factory;
+};
+
+/**
  * Unit abbreviations
  */
 const UNIT_MAP = {
@@ -206,10 +218,94 @@ const truncateToUnit = (date, unit) => {
 };
 
 /**
+ * Check if a date is calendrically valid
+ * Validates that the date actually exists (e.g., Feb 30 is invalid)
+ * 
+ * @param {number} year - Full year
+ * @param {number} month - Month (1-12)
+ * @param {number} day - Day of month
+ * @returns {boolean} True if date is valid
+ */
+const isCalendarValid = (year, month, day) => {
+    // Check basic ranges
+    if (month < 1 || month > 12 || day < 1) return false;
+    
+    // Days in each month (non-leap year)
+    const daysInMonths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    
+    // Check leap year for February
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+    const maxDay = month === 2 && isLeap ? 29 : daysInMonths[month - 1];
+    
+    return day <= maxDay;
+};
+
+/**
+ * Parse date string and extract components for validation
+ * @param {string} str - Date string
+ * @returns {Object|null} Parsed components or null
+ */
+const parseDateString = (str) => {
+    if (typeof str !== 'string') return null;
+    
+    // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+        return {
+            year: parseInt(isoMatch[1], 10),
+            month: parseInt(isoMatch[2], 10),
+            day: parseInt(isoMatch[3], 10)
+        };
+    }
+    
+    // Slash format: MM/DD/YYYY or DD/MM/YYYY (assume MM/DD/YYYY)
+    const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (slashMatch) {
+        return {
+            year: parseInt(slashMatch[3], 10),
+            month: parseInt(slashMatch[1], 10),
+            day: parseInt(slashMatch[2], 10)
+        };
+    }
+    
+    return null;
+};
+
+/**
  * Check if date is valid
+ * Performs both JavaScript Date validity and calendar validity checks
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @returns {boolean} True if date is valid
  */
 export const isValid = (ctx) => {
-    return ctx._d instanceof Date && !isNaN(ctx._d.getTime());
+    // First check: JavaScript Date must be valid
+    if (!(ctx._d instanceof Date) || isNaN(ctx._d.getTime())) {
+        return false;
+    }
+    
+    // If original input was a string, validate against calendar
+    if (ctx._input !== undefined && typeof ctx._input === 'string') {
+        const parsed = parseDateString(ctx._input);
+        if (parsed) {
+            // Check if the parsed date matches what Date created
+            // This catches cases like Feb 30 which JS converts to Mar 2
+            const d = ctx._d;
+            const matchesInput = 
+                d.getFullYear() === parsed.year &&
+                (d.getMonth() + 1) === parsed.month &&
+                d.getDate() === parsed.day;
+            
+            if (!matchesInput) {
+                return false;
+            }
+            
+            return isCalendarValid(parsed.year, parsed.month, parsed.day);
+        }
+    }
+    
+    // For Date objects or timestamps, just check JS Date validity
+    return true;
 };
 
 /**
@@ -261,8 +357,7 @@ export const quarter = (ctx) => {
 export const min = (...dates) => {
     const timestamps = dates.map(d => toDate(d).getTime());
     const minTime = Math.min(...timestamps);
-    const { nano } = require('./index.js');
-    return nano(new Date(minTime));
+    return nanoFactory(new Date(minTime));
 };
 
 /**
@@ -271,8 +366,163 @@ export const min = (...dates) => {
 export const max = (...dates) => {
     const timestamps = dates.map(d => toDate(d).getTime());
     const maxTime = Math.max(...timestamps);
-    const { nano } = require('./index.js');
-    return nano(new Date(maxTime));
+    return nanoFactory(new Date(maxTime));
+};
+
+// ============================================
+// BUSINESS DAY UTILITIES
+// ============================================
+
+/**
+ * Check if a date is a business day (Mon-Fri, not a holiday)
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
+ * @returns {boolean} True if business day
+ * 
+ * @example
+ * isBusinessDay(ctx)                    // Check if weekday
+ * isBusinessDay(ctx, ['2026-01-01'])   // Exclude holidays
+ */
+export const isBusinessDay = (ctx, holidays = []) => {
+    const dayOfWeek = ctx._d.getDay();
+    
+    // Weekend check (0 = Sunday, 6 = Saturday)
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+        return false;
+    }
+    
+    // Holiday check
+    if (holidays.length > 0) {
+        const dateStr = ctx._d.toISOString().split('T')[0];
+        const holidaySet = new Set(
+            holidays.map(h => {
+                const d = h instanceof Date ? h : new Date(h);
+                return d.toISOString().split('T')[0];
+            })
+        );
+        return !holidaySet.has(dateStr);
+    }
+    
+    return true;
+};
+
+/**
+ * Add business days to a date (skips weekends and holidays)
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @param {number} days - Number of business days to add (can be negative)
+ * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
+ * @returns {Proxy} New NanoDate instance
+ * 
+ * @example
+ * addBusinessDays(ctx, 5)               // Add 5 business days
+ * addBusinessDays(ctx, -3, holidays)    // Subtract 3 business days
+ */
+export const addBusinessDays = (ctx, days, holidays = []) => {
+    // Build holiday set for fast lookup
+    const holidaySet = new Set(
+        holidays.map(h => {
+            const d = h instanceof Date ? h : new Date(h);
+            return d.toISOString().split('T')[0];
+        })
+    );
+    
+    const result = new Date(ctx._d);
+    let remaining = Math.abs(days);
+    const direction = days >= 0 ? 1 : -1;
+    
+    while (remaining > 0) {
+        result.setDate(result.getDate() + direction);
+        const dayOfWeek = result.getDay();
+        
+        // Skip weekends
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            continue;
+        }
+        
+        // Skip holidays
+        const dateStr = result.toISOString().split('T')[0];
+        if (holidaySet.has(dateStr)) {
+            continue;
+        }
+        
+        remaining--;
+    }
+    
+    return nanoFactory(result, ctx._l);
+};
+
+/**
+ * Calculate number of business days between two dates
+ * 
+ * @param {Object} ctx - NanoDate context (start date)
+ * @param {Object|Date|string} other - End date
+ * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
+ * @returns {number} Number of business days (can be negative)
+ * 
+ * @example
+ * diffBusinessDays(ctx, '2026-01-31')          // Business days until Jan 31
+ * diffBusinessDays(ctx, otherDate, holidays)   // With holiday exclusion
+ */
+export const diffBusinessDays = (ctx, other, holidays = []) => {
+    const otherDate = toDate(other);
+    const start = new Date(Math.min(ctx._d.getTime(), otherDate.getTime()));
+    const end = new Date(Math.max(ctx._d.getTime(), otherDate.getTime()));
+    
+    // Build holiday set for fast lookup
+    const holidaySet = new Set(
+        holidays.map(h => {
+            const d = h instanceof Date ? h : new Date(h);
+            return d.toISOString().split('T')[0];
+        })
+    );
+    
+    let count = 0;
+    const current = new Date(start);
+    
+    while (current < end) {
+        current.setDate(current.getDate() + 1);
+        const dayOfWeek = current.getDay();
+        
+        // Skip weekends
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            continue;
+        }
+        
+        // Skip holidays
+        const dateStr = current.toISOString().split('T')[0];
+        if (holidaySet.has(dateStr)) {
+            continue;
+        }
+        
+        count++;
+    }
+    
+    // Return negative if ctx is after other
+    return ctx._d.getTime() > otherDate.getTime() ? count : -count;
+};
+
+/**
+ * Get next business day
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
+ * @returns {Proxy} New NanoDate instance
+ */
+export const nextBusinessDay = (ctx, holidays = []) => {
+    return addBusinessDays(ctx, 1, holidays);
+};
+
+/**
+ * Get previous business day
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
+ * @returns {Proxy} New NanoDate instance
+ */
+export const prevBusinessDay = (ctx, holidays = []) => {
+    return addBusinessDays(ctx, -1, holidays);
 };
 
 export default {
@@ -290,5 +540,10 @@ export default {
     week,
     quarter,
     min,
-    max
+    max,
+    isBusinessDay,
+    addBusinessDays,
+    diffBusinessDays,
+    nextBusinessDay,
+    prevBusinessDay
 };

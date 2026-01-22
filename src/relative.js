@@ -4,17 +4,46 @@
  */
 
 /**
+ * RelativeTimeFormat cache for performance
+ * Creating RTF instances is expensive
+ */
+const rtfCache = new Map();
+const MAX_RTF_CACHE = 50;
+
+/**
+ * Get cached RelativeTimeFormat instance
+ */
+const getCachedRTF = (locale, options) => {
+    const key = `${locale}:${options.numeric}:${options.style || 'long'}`;
+    
+    if (rtfCache.has(key)) {
+        return rtfCache.get(key);
+    }
+    
+    // Limit cache size
+    if (rtfCache.size >= MAX_RTF_CACHE) {
+        const firstKey = rtfCache.keys().next().value;
+        rtfCache.delete(firstKey);
+    }
+    
+    const rtf = new Intl.RelativeTimeFormat(locale, options);
+    rtfCache.set(key, rtf);
+    return rtf;
+};
+
+/**
  * Time units and their divisors
  * Units are ordered from smallest to largest
+ * Optimized with pre-calculated milliseconds
  */
 const UNITS = [
     { unit: 'second', ms: 1000, max: 60 },
-    { unit: 'minute', ms: 60 * 1000, max: 60 },
-    { unit: 'hour', ms: 60 * 60 * 1000, max: 24 },
-    { unit: 'day', ms: 24 * 60 * 60 * 1000, max: 7 },
-    { unit: 'week', ms: 7 * 24 * 60 * 60 * 1000, max: 4.35 },
-    { unit: 'month', ms: 30.44 * 24 * 60 * 60 * 1000, max: 12 },
-    { unit: 'year', ms: 365.25 * 24 * 60 * 60 * 1000, max: Infinity }
+    { unit: 'minute', ms: 60000, max: 60 },
+    { unit: 'hour', ms: 3600000, max: 24 },
+    { unit: 'day', ms: 86400000, max: 7 },
+    { unit: 'week', ms: 604800000, max: 4.35 },
+    { unit: 'month', ms: 2629800000, max: 12 },
+    { unit: 'year', ms: 31557600000, max: Infinity }
 ];
 
 /**
@@ -49,14 +78,15 @@ export const fromNow = (ctx, withoutSuffix = false) => {
     const diff = ctx._d.getTime() - now;
     const absDiff = Math.abs(diff);
 
-    // Intl.RelativeTimeFormat kullan
-    const rtf = new Intl.RelativeTimeFormat(locale, {
+    // Use cached RelativeTimeFormat
+    const rtf = getCachedRTF(locale, {
         numeric: withoutSuffix ? 'always' : 'auto',
         style: 'long'
     });
 
-    // En uygun birimi bul
-    for (const { unit, ms, max } of UNITS) {
+    // Find appropriate unit using optimized loop
+    for (let i = 0; i < UNITS.length; i++) {
+        const { unit, ms, max } = UNITS[i];
         const value = absDiff / ms;
         if (value < max) {
             const roundedValue = Math.round(value);
@@ -87,12 +117,14 @@ export const toNow = (ctx, withoutSuffix = false) => {
     const diff = now - ctx._d.getTime();
     const absDiff = Math.abs(diff);
 
-    const rtf = new Intl.RelativeTimeFormat(locale, {
+    // Use cached RelativeTimeFormat
+    const rtf = getCachedRTF(locale, {
         numeric: withoutSuffix ? 'always' : 'auto',
         style: 'long'
     });
 
-    for (const { unit, ms, max } of UNITS) {
+    for (let i = 0; i < UNITS.length; i++) {
+        const { unit, ms, max } = UNITS[i];
         const value = absDiff / ms;
         if (value < max) {
             const roundedValue = Math.round(value);
@@ -117,12 +149,14 @@ export const from = (ctx, other) => {
     const diff = ctx._d.getTime() - otherDate.getTime();
     const absDiff = Math.abs(diff);
 
-    const rtf = new Intl.RelativeTimeFormat(locale, {
+    // Use cached RelativeTimeFormat
+    const rtf = getCachedRTF(locale, {
         numeric: 'auto',
         style: 'long'
     });
 
-    for (const { unit, ms, max } of UNITS) {
+    for (let i = 0; i < UNITS.length; i++) {
+        const { unit, ms, max } = UNITS[i];
         const value = absDiff / ms;
         if (value < max) {
             const roundedValue = Math.round(value);

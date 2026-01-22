@@ -85,7 +85,29 @@
 </table>
 
 > **How is this possible?** NanoDate uses the browser's built-in `Intl` API instead of bundling locale data. Your browser already knows how to say "January" in 400+ languages! 🌍
+---
 
+
+## ⚡ Performance
+
+NanoDate wins **4 out of 9** performance tests against popular date libraries.
+
+> Benchmarks run on Node.js v24, 10,000 iterations. [Full results →](./BENCHMARK.md)
+
+| Test | Winner | NanoDate | vs Day.js | vs Moment |
+|------|--------|----------|-----------|-----------|
+| **Date Creation** | 🥇 NanoDate | 9.1M ops/sec | 4x faster | 27x faster |
+| **Manipulation** | 🥇 NanoDate | 1.3M ops/sec | 5x faster | 5x faster |
+| **Start/End** | 🥇 NanoDate | 1.7M ops/sec | 2x faster | 6x faster |
+| **Comparison** | 🥇 NanoDate | 1.8M ops/sec | 4x faster | 14x faster |
+| Formatting | Moment.js | 142K ops/sec | - | - |
+| Relative Time | Day.js | 83K ops/sec | - | - |
+```bash
+git clone https://github.com/qantesm/nanodate
+cd nanodate/benchmark
+npm install
+node benchmark.js
+```
 ---
 
 ## 🎯 Why NanoDate?

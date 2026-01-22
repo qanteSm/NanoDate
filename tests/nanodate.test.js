@@ -442,3 +442,279 @@ describe('Intl Support Check', () => {
         expect(typeof supported).toBe('boolean');
     });
 });
+
+// ============================================
+// EDGE CASES & VALIDATION TESTS
+// ============================================
+
+describe('Date Validation Edge Cases', () => {
+    describe('Invalid calendar dates', () => {
+        it('should reject February 30', () => {
+            expect(nano('2026-02-30').isValid()).toBe(false);
+        });
+
+        it('should reject February 31', () => {
+            expect(nano('2026-02-31').isValid()).toBe(false);
+        });
+
+        it('should reject January 32', () => {
+            expect(nano('2026-01-32').isValid()).toBe(false);
+        });
+
+        it('should reject April 31', () => {
+            expect(nano('2026-04-31').isValid()).toBe(false);
+        });
+
+        it('should reject June 31', () => {
+            expect(nano('2026-06-31').isValid()).toBe(false);
+        });
+
+        it('should reject September 31', () => {
+            expect(nano('2026-09-31').isValid()).toBe(false);
+        });
+
+        it('should reject November 31', () => {
+            expect(nano('2026-11-31').isValid()).toBe(false);
+        });
+
+        it('should reject month 13', () => {
+            expect(nano('2026-13-01').isValid()).toBe(false);
+        });
+
+        it('should reject month 0', () => {
+            expect(nano('2026-00-15').isValid()).toBe(false);
+        });
+
+        it('should reject day 0', () => {
+            expect(nano('2026-01-00').isValid()).toBe(false);
+        });
+    });
+
+    describe('Leap year validation', () => {
+        it('should accept Feb 29 in leap year (2024)', () => {
+            expect(nano('2024-02-29').isValid()).toBe(true);
+        });
+
+        it('should accept Feb 29 in leap year (2028)', () => {
+            expect(nano('2028-02-29').isValid()).toBe(true);
+        });
+
+        it('should reject Feb 29 in non-leap year (2026)', () => {
+            expect(nano('2026-02-29').isValid()).toBe(false);
+        });
+
+        it('should reject Feb 29 in non-leap year (2025)', () => {
+            expect(nano('2025-02-29').isValid()).toBe(false);
+        });
+
+        it('should accept Feb 29 in year 2000 (century leap year)', () => {
+            expect(nano('2000-02-29').isValid()).toBe(true);
+        });
+
+        it('should reject Feb 29 in year 1900 (century non-leap year)', () => {
+            expect(nano('1900-02-29').isValid()).toBe(false);
+        });
+    });
+
+    describe('Valid boundary dates', () => {
+        it('should accept January 31', () => {
+            expect(nano('2026-01-31').isValid()).toBe(true);
+        });
+
+        it('should accept February 28 in non-leap year', () => {
+            expect(nano('2026-02-28').isValid()).toBe(true);
+        });
+
+        it('should accept March 31', () => {
+            expect(nano('2026-03-31').isValid()).toBe(true);
+        });
+
+        it('should accept April 30', () => {
+            expect(nano('2026-04-30').isValid()).toBe(true);
+        });
+
+        it('should accept December 31', () => {
+            expect(nano('2026-12-31').isValid()).toBe(true);
+        });
+    });
+});
+
+// ============================================
+// STRICT MODE TESTS
+// ============================================
+
+import { strict, config, resetConfig, InvalidDateError } from '../src/index.js';
+
+describe('Strict Mode', () => {
+    afterEach(() => {
+        resetConfig();
+    });
+
+    describe('nano.strict()', () => {
+        it('should throw InvalidDateError for February 30', () => {
+            expect(() => strict('2026-02-30')).toThrow(InvalidDateError);
+        });
+
+        it('should throw InvalidDateError for invalid dates', () => {
+            expect(() => strict('2026-02-31')).toThrow(InvalidDateError);
+            expect(() => strict('2026-04-31')).toThrow(InvalidDateError);
+            expect(() => strict('2026-13-01')).toThrow(InvalidDateError);
+        });
+
+        it('should accept valid dates', () => {
+            expect(() => strict('2026-01-21')).not.toThrow();
+            expect(strict('2026-01-21').year()).toBe(2026);
+        });
+
+        it('should accept leap year Feb 29', () => {
+            expect(() => strict('2024-02-29')).not.toThrow();
+        });
+
+        it('should throw for non-leap year Feb 29', () => {
+            expect(() => strict('2026-02-29')).toThrow(InvalidDateError);
+        });
+    });
+
+    describe('Global strict mode via config', () => {
+        it('should throw when strict mode is enabled globally', () => {
+            config({ strict: true });
+            expect(() => nano('2026-02-30')).toThrow(InvalidDateError);
+        });
+
+        it('should work normally after resetConfig', () => {
+            config({ strict: true });
+            resetConfig();
+            expect(() => nano('2026-02-30')).not.toThrow();
+        });
+    });
+});
+
+// ============================================
+// BUSINESS DAY TESTS
+// ============================================
+
+describe('Business Day Functions', () => {
+    describe('isBusinessDay()', () => {
+        it('should return true for Monday', () => {
+            // 2026-01-19 is Monday
+            expect(nano('2026-01-19').isBusinessDay()).toBe(true);
+        });
+
+        it('should return true for Friday', () => {
+            // 2026-01-23 is Friday
+            expect(nano('2026-01-23').isBusinessDay()).toBe(true);
+        });
+
+        it('should return false for Saturday', () => {
+            // 2026-01-24 is Saturday
+            expect(nano('2026-01-24').isBusinessDay()).toBe(false);
+        });
+
+        it('should return false for Sunday', () => {
+            // 2026-01-25 is Sunday
+            expect(nano('2026-01-25').isBusinessDay()).toBe(false);
+        });
+
+        it('should return false for holidays', () => {
+            const holidays = ['2026-01-19'];
+            expect(nano('2026-01-19').isBusinessDay(holidays)).toBe(false);
+        });
+    });
+
+    describe('addBusinessDays()', () => {
+        it('should add business days skipping weekends', () => {
+            // 2026-01-22 is Thursday, +2 business days = Monday 26th
+            const result = nano('2026-01-22').addBusinessDays(2);
+            expect(result.date()).toBe(26);
+            expect(result.day()).toBe(1); // Monday
+        });
+
+        it('should subtract business days', () => {
+            // 2026-01-26 is Monday, -2 business days = Thursday 22nd
+            const result = nano('2026-01-26').addBusinessDays(-2);
+            expect(result.date()).toBe(22);
+            expect(result.day()).toBe(4); // Thursday
+        });
+
+        it('should skip holidays', () => {
+            const holidays = ['2026-01-26'];
+            // 2026-01-22 is Thursday, +2 business days with Jan 26 as holiday = Tuesday 27th
+            const result = nano('2026-01-22').addBusinessDays(2, holidays);
+            expect(result.date()).toBe(27);
+        });
+    });
+
+    describe('nextBusinessDay()', () => {
+        it('should get next business day from Friday', () => {
+            // 2026-01-23 is Friday, next business day is Monday 26th
+            const result = nano('2026-01-23').nextBusinessDay();
+            expect(result.date()).toBe(26);
+            expect(result.day()).toBe(1);
+        });
+
+        it('should get next business day from Saturday', () => {
+            // 2026-01-24 is Saturday, next business day is Monday 26th
+            const result = nano('2026-01-24').nextBusinessDay();
+            expect(result.date()).toBe(26);
+        });
+    });
+
+    describe('prevBusinessDay()', () => {
+        it('should get previous business day from Monday', () => {
+            // 2026-01-26 is Monday, prev business day is Friday 23rd
+            const result = nano('2026-01-26').prevBusinessDay();
+            expect(result.date()).toBe(23);
+            expect(result.day()).toBe(5); // Friday
+        });
+    });
+});
+
+// ============================================
+// TIMEZONE CHAINABLE API TESTS
+// ============================================
+
+describe('Chainable Timezone API', () => {
+    it('should return NanoDate from toTz()', () => {
+        const result = nano('2026-01-22T12:00:00').toTz('America/New_York');
+        expect(result.format).toBeDefined();
+        expect(typeof result.format).toBe('function');
+    });
+
+    it('should allow chaining after toTz()', () => {
+        const result = nano('2026-01-22T12:00:00')
+            .toTz('America/New_York')
+            .add(1, 'day');
+        expect(result.date()).toBe(23);
+    });
+
+    it('should have timezone alias', () => {
+        const result = nano('2026-01-22').timezone('Europe/London');
+        expect(result.format).toBeDefined();
+    });
+});
+
+// ============================================
+// PERFORMANCE OPTIMIZATION TESTS
+// ============================================
+
+describe('Performance Optimizations', () => {
+    describe('Format caching', () => {
+        it('should handle repeated formatting efficiently', () => {
+            const date = nano('2026-01-22');
+            const start = Date.now();
+            
+            for (let i = 0; i < 1000; i++) {
+                date.format('YYYY-MM-DD');
+            }
+            
+            const elapsed = Date.now() - start;
+            expect(elapsed).toBeLessThan(500); // Should be fast
+        });
+
+        it('should use precompiled formats', () => {
+            const date = nano('2026-01-22T12:30:45');
+            expect(date.format('YYYY-MM-DD')).toBe('2026-01-22');
+            expect(date.format('HH:mm:ss')).toBe('12:30:45');
+        });
+    });
+});
