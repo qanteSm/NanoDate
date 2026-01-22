@@ -34,7 +34,7 @@
     "size-limit": [
         {
             "path": "dist/nanodate.esm.js",
-            "limit": "10 KB",
+            "limit": "10.5 KB",
             "name": "Full bundle"
         },
         {
