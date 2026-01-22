@@ -6,9 +6,9 @@
  * @author Muhammet Ali Büyük
  */
 
-import { format } from './format.js';
+import { format, parse as parseFormat } from './format.js';
 import { fromNow, toNow } from './relative.js';
-import { add, subtract, startOf, endOf, set, init as initManipulate } from './manipulate.js';
+import { add, subtract, startOf, endOf, set, init as initManipulate, batch, raw } from './manipulate.js';
 import { diff, isBefore, isAfter, isSame, isSameOrBefore, isSameOrAfter, isBetween, isValid, isLeapYear, daysInMonth, dayOfYear, week, quarter, isBusinessDay, addBusinessDays, diffBusinessDays, nextBusinessDay, prevBusinessDay, initUtils } from './utils.js';
 import { tz, tzChainable, utcOffset, toTimezone, getTimezone, initTimezone } from './timezone.js';
 
@@ -128,6 +128,9 @@ const methods = {
     diffBusinessDays,
     nextBusinessDay,
     prevBusinessDay,
+    
+    // Batch operations - bypass Proxy overhead
+    batch,
 
     // Native Date metodları için pass-through
     toISOString: (ctx) => ctx._d.toISOString(),
@@ -135,6 +138,93 @@ const methods = {
     valueOf: (ctx) => ctx._d.getTime(),
     unix: (ctx) => Math.floor(ctx._d.getTime() / 1000),
     toDate: (ctx) => new Date(ctx._d),
+    
+    /**
+     * Convert to array [year, month, date, hour, minute, second, millisecond]
+     * @param {Object} ctx - NanoDate context
+     * @returns {number[]} Array of date components
+     */
+    toArray: (ctx) => {
+        const d = ctx._d;
+        return [
+            d.getFullYear(),
+            d.getMonth(),
+            d.getDate(),
+            d.getHours(),
+            d.getMinutes(),
+            d.getSeconds(),
+            d.getMilliseconds()
+        ];
+    },
+    
+    /**
+     * Convert to object { year, month, date, hour, minute, second, millisecond }
+     * @param {Object} ctx - NanoDate context
+     * @returns {Object} Object with date components
+     */
+    toObject: (ctx) => {
+        const d = ctx._d;
+        return {
+            year: d.getFullYear(),
+            month: d.getMonth(),
+            date: d.getDate(),
+            hour: d.getHours(),
+            minute: d.getMinutes(),
+            second: d.getSeconds(),
+            millisecond: d.getMilliseconds()
+        };
+    },
+    
+    /**
+     * Calendar-style formatting (Today, Yesterday, Tomorrow, etc.)
+     * @param {Object} ctx - NanoDate context
+     * @param {Object} [referenceDate] - Reference date (default: now)
+     * @returns {string} Calendar string
+     */
+    calendar: (ctx, referenceDate) => {
+        const locale = ctx._l || 'en';
+        const d = ctx._d;
+        const ref = referenceDate ? (referenceDate._d || new Date(referenceDate)) : new Date();
+        
+        // Get day boundaries
+        const startOfToday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+        const startOfTomorrow = new Date(startOfToday.getTime() + 86400000);
+        const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+        const startOfThisWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86400000);
+        const startOfNextWeek = new Date(startOfThisWeek.getTime() + 7 * 86400000);
+        const startOfLastWeek = new Date(startOfThisWeek.getTime() - 7 * 86400000);
+        
+        const ts = d.getTime();
+        const timeStr = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(d);
+        
+        // Calendar strings by locale
+        const strings = getCalendarStrings(locale);
+        
+        if (ts >= startOfToday.getTime() && ts < startOfTomorrow.getTime()) {
+            return strings.today.replace('{time}', timeStr);
+        }
+        if (ts >= startOfTomorrow.getTime() && ts < startOfTomorrow.getTime() + 86400000) {
+            return strings.tomorrow.replace('{time}', timeStr);
+        }
+        if (ts >= startOfYesterday.getTime() && ts < startOfToday.getTime()) {
+            return strings.yesterday.replace('{time}', timeStr);
+        }
+        if (ts >= startOfThisWeek.getTime() && ts < startOfNextWeek.getTime()) {
+            const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(d);
+            return strings.thisWeek.replace('{weekday}', weekday).replace('{time}', timeStr);
+        }
+        if (ts >= startOfLastWeek.getTime() && ts < startOfThisWeek.getTime()) {
+            const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(d);
+            return strings.lastWeek.replace('{weekday}', weekday).replace('{time}', timeStr);
+        }
+        if (ts >= startOfNextWeek.getTime() && ts < startOfNextWeek.getTime() + 7 * 86400000) {
+            const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(d);
+            return strings.nextWeek.replace('{weekday}', weekday).replace('{time}', timeStr);
+        }
+        
+        // Fallback to full date
+        return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+    },
 
     // Getter'lar
     year: (ctx) => ctx._d.getFullYear(),
@@ -151,6 +241,103 @@ const methods = {
 
     // Clone
     clone: (ctx) => nano(ctx._d, ctx._l)
+};
+
+/**
+ * Calendar strings for different locales
+ */
+const calendarStringsCache = Object.create(null);
+
+const getCalendarStrings = (locale) => {
+    if (calendarStringsCache[locale]) return calendarStringsCache[locale];
+    
+    const lang = locale.split('-')[0];
+    
+    const strings = {
+        en: {
+            today: 'Today at {time}',
+            tomorrow: 'Tomorrow at {time}',
+            yesterday: 'Yesterday at {time}',
+            thisWeek: '{weekday} at {time}',
+            lastWeek: 'Last {weekday} at {time}',
+            nextWeek: 'Next {weekday} at {time}'
+        },
+        tr: {
+            today: 'Bugün {time}',
+            tomorrow: 'Yarın {time}',
+            yesterday: 'Dün {time}',
+            thisWeek: '{weekday} {time}',
+            lastWeek: 'Geçen {weekday} {time}',
+            nextWeek: 'Gelecek {weekday} {time}'
+        },
+        de: {
+            today: 'Heute um {time}',
+            tomorrow: 'Morgen um {time}',
+            yesterday: 'Gestern um {time}',
+            thisWeek: '{weekday} um {time}',
+            lastWeek: 'Letzten {weekday} um {time}',
+            nextWeek: 'Nächsten {weekday} um {time}'
+        },
+        fr: {
+            today: "Aujourd'hui à {time}",
+            tomorrow: 'Demain à {time}',
+            yesterday: 'Hier à {time}',
+            thisWeek: '{weekday} à {time}',
+            lastWeek: '{weekday} dernier à {time}',
+            nextWeek: '{weekday} prochain à {time}'
+        },
+        es: {
+            today: 'Hoy a las {time}',
+            tomorrow: 'Mañana a las {time}',
+            yesterday: 'Ayer a las {time}',
+            thisWeek: '{weekday} a las {time}',
+            lastWeek: 'El {weekday} pasado a las {time}',
+            nextWeek: 'El próximo {weekday} a las {time}'
+        },
+        ja: {
+            today: '今日 {time}',
+            tomorrow: '明日 {time}',
+            yesterday: '昨日 {time}',
+            thisWeek: '{weekday} {time}',
+            lastWeek: '先週{weekday} {time}',
+            nextWeek: '来週{weekday} {time}'
+        },
+        zh: {
+            today: '今天 {time}',
+            tomorrow: '明天 {time}',
+            yesterday: '昨天 {time}',
+            thisWeek: '{weekday} {time}',
+            lastWeek: '上周{weekday} {time}',
+            nextWeek: '下周{weekday} {time}'
+        },
+        ko: {
+            today: '오늘 {time}',
+            tomorrow: '내일 {time}',
+            yesterday: '어제 {time}',
+            thisWeek: '{weekday} {time}',
+            lastWeek: '지난 {weekday} {time}',
+            nextWeek: '다음 {weekday} {time}'
+        },
+        ar: {
+            today: 'اليوم {time}',
+            tomorrow: 'غداً {time}',
+            yesterday: 'أمس {time}',
+            thisWeek: '{weekday} {time}',
+            lastWeek: '{weekday} الماضي {time}',
+            nextWeek: '{weekday} القادم {time}'
+        },
+        ru: {
+            today: 'Сегодня в {time}',
+            tomorrow: 'Завтра в {time}',
+            yesterday: 'Вчера в {time}',
+            thisWeek: '{weekday} в {time}',
+            lastWeek: 'В прошлый {weekday} в {time}',
+            nextWeek: 'В следующий {weekday} в {time}'
+        }
+    };
+    
+    calendarStringsCache[locale] = strings[lang] || strings.en;
+    return calendarStringsCache[locale];
 };
 
 /**
@@ -348,6 +535,36 @@ nano.strict = strict;
 nano.config = config;
 nano.resetConfig = resetConfig;
 nano.extend = extend;
+nano.utc = utc;
+nano.fromUnix = fromUnix;
+
+/**
+ * Parse a date string with a specific format
+ * 
+ * @param {string} dateStr - Date string to parse
+ * @param {string} format - Format string
+ * @param {string} [locale] - Locale
+ * @returns {Proxy} NanoDate instance
+ * 
+ * @example
+ * nano.parse('21-01-2026', 'DD-MM-YYYY')           // Jan 21, 2026
+ * nano.parse('2026/01/21 14:30', 'YYYY/MM/DD HH:mm')
+ * nano.parse('01/21/26', 'MM/DD/YY')
+ * nano.parse('3:30 PM', 'h:mm A')
+ */
+nano.parse = (dateStr, format, locale) => parseFormat(dateStr, format, locale, nano);
+
+/**
+ * Raw timestamp operations for maximum performance
+ * Use when doing bulk calculations without NanoDate wrapper
+ * 
+ * @example
+ * const ts = Date.now();
+ * nano.raw.addDays(ts, 7)          // Add 7 days to timestamp
+ * nano.raw.startOfDay(ts)          // Get start of day timestamp
+ * nano.raw.diffDays(ts1, ts2)      // Get day difference
+ */
+nano.raw = raw;
 
 // Default export
 export default nano;

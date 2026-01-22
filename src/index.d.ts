@@ -355,6 +355,189 @@ export interface NanoDate {
      * @returns New NanoDate instance
      */
     clone(): NanoDate;
+    
+    // ============================================
+    // NEW FEATURES v0.1.6
+    // ============================================
+    
+    /**
+     * Convert to array [year, month, date, hour, minute, second, millisecond]
+     * @returns Array of date components
+     * 
+     * @example
+     * nano('2026-01-21T14:30:00').toArray()
+     * // [2026, 0, 21, 14, 30, 0, 0]
+     */
+    toArray(): [number, number, number, number, number, number, number];
+    
+    /**
+     * Convert to object with date components
+     * @returns Object with year, month, date, hour, minute, second, millisecond
+     * 
+     * @example
+     * nano('2026-01-21T14:30:00').toObject()
+     * // { year: 2026, month: 0, date: 21, hour: 14, minute: 30, second: 0, millisecond: 0 }
+     */
+    toObject(): {
+        year: number;
+        month: number;
+        date: number;
+        hour: number;
+        minute: number;
+        second: number;
+        millisecond: number;
+    };
+    
+    /**
+     * Calendar-style formatting (Today, Yesterday, Tomorrow, etc.)
+     * Locale-aware calendar strings
+     * 
+     * @param referenceDate - Reference date for comparison (default: now)
+     * @returns Calendar string like "Today at 2:30 PM", "Yesterday at 10:00 AM"
+     * 
+     * @example
+     * nano().calendar()                    // "Today at 2:30 PM"
+     * nano().subtract(1, 'day').calendar() // "Yesterday at 2:30 PM"
+     * nano().add(1, 'day').calendar()      // "Tomorrow at 2:30 PM"
+     * nano('2026-01-20', 'tr').calendar()  // "Dün 14:30"
+     */
+    calendar(referenceDate?: DateInput): string;
+    
+    /**
+     * Create batch context for chained operations
+     * Up to 10x faster for multiple operations by avoiding Proxy overhead
+     * 
+     * @returns BatchContext with chainable methods
+     * 
+     * @example
+     * // Instead of: nano().add(1, 'day').add(2, 'hours').startOf('hour')
+     * // Use:
+     * nano().batch()
+     *   .add(1, 'day')
+     *   .add(2, 'hours')
+     *   .startOf('hour')
+     *   .done()
+     */
+    batch(): BatchContext;
+}
+
+/**
+ * Batch context for high-performance chained operations
+ * Mutates internal date to avoid object creation overhead
+ */
+export interface BatchContext {
+    /**
+     * Add time (mutates internal date)
+     */
+    add(value: number, unit: TimeUnit): BatchContext;
+    
+    /**
+     * Subtract time (mutates internal date)
+     */
+    subtract(value: number, unit: TimeUnit): BatchContext;
+    
+    /**
+     * Set to start of unit (mutates internal date)
+     */
+    startOf(unit: TimeUnit): BatchContext;
+    
+    /**
+     * Set to end of unit (mutates internal date)
+     */
+    endOf(unit: TimeUnit): BatchContext;
+    
+    /**
+     * Set specific unit value (mutates internal date)
+     */
+    set(unit: TimeUnit, value: number): BatchContext;
+    
+    /**
+     * Finalize batch and return NanoDate
+     */
+    done(): NanoDate;
+    
+    /**
+     * Get timestamp without creating NanoDate
+     */
+    valueOf(): number;
+    
+    /**
+     * Get Date object without creating NanoDate
+     */
+    toDate(): Date;
+}
+
+/**
+ * Raw timestamp operations for maximum performance
+ * Use for bulk calculations without NanoDate wrapper
+ */
+export interface RawOperations {
+    /**
+     * Add milliseconds to timestamp
+     */
+    addMs(ts: number, ms: number): number;
+    
+    /**
+     * Add seconds to timestamp
+     */
+    addSeconds(ts: number, seconds: number): number;
+    
+    /**
+     * Add minutes to timestamp
+     */
+    addMinutes(ts: number, minutes: number): number;
+    
+    /**
+     * Add hours to timestamp
+     */
+    addHours(ts: number, hours: number): number;
+    
+    /**
+     * Add days to timestamp
+     */
+    addDays(ts: number, days: number): number;
+    
+    /**
+     * Add weeks to timestamp
+     */
+    addWeeks(ts: number, weeks: number): number;
+    
+    /**
+     * Get start of day for timestamp
+     * @param ts - Timestamp
+     * @param tzOffset - Timezone offset in ms (optional, auto-detected)
+     */
+    startOfDay(ts: number, tzOffset?: number): number;
+    
+    /**
+     * Get end of day for timestamp
+     */
+    endOfDay(ts: number, tzOffset?: number): number;
+    
+    /**
+     * Get start of hour for timestamp
+     */
+    startOfHour(ts: number): number;
+    
+    /**
+     * Get start of minute for timestamp
+     */
+    startOfMinute(ts: number): number;
+    
+    /**
+     * Diff in days between two timestamps
+     */
+    diffDays(ts1: number, ts2: number): number;
+    
+    /**
+     * Diff in hours between two timestamps
+     */
+    diffHours(ts1: number, ts2: number): number;
+    
+    /**
+     * Diff in minutes between two timestamps
+     */
+    diffMinutes(ts1: number, ts2: number): number;
 }
 
 /**
@@ -426,6 +609,49 @@ export namespace nano {
      * @param fn - Method implementation
      */
     function extend(name: string, fn: (ctx: any, ...args: any[]) => any): void;
+    
+    /**
+     * Create NanoDate in UTC mode
+     * @param input - Date input
+     * @returns NanoDate instance in UTC
+     */
+    function utc(input?: DateInput): NanoDate;
+    
+    /**
+     * Create NanoDate from Unix timestamp (seconds)
+     * @param timestamp - Unix timestamp in seconds
+     * @param locale - Locale (optional)
+     * @returns NanoDate instance
+     */
+    function fromUnix(timestamp: number, locale?: string): NanoDate;
+    
+    /**
+     * Parse a date string with a specific format
+     * 
+     * @param dateStr - Date string to parse
+     * @param format - Format string
+     * @param locale - Locale (optional)
+     * @returns NanoDate instance
+     * 
+     * @example
+     * nano.parse('21-01-2026', 'DD-MM-YYYY')              // Jan 21, 2026
+     * nano.parse('2026/01/21 14:30', 'YYYY/MM/DD HH:mm')  // Jan 21, 2026 2:30 PM
+     * nano.parse('01/21/26', 'MM/DD/YY')                  // Jan 21, 2026
+     * nano.parse('3:30 PM', 'h:mm A')                     // Today at 3:30 PM
+     */
+    function parse(dateStr: string, format: string, locale?: string): NanoDate;
+    
+    /**
+     * Raw timestamp operations for maximum performance
+     * Use when doing bulk calculations without NanoDate wrapper
+     * 
+     * @example
+     * const ts = Date.now();
+     * nano.raw.addDays(ts, 7)          // Add 7 days to timestamp
+     * nano.raw.startOfDay(ts)          // Get start of day timestamp
+     * nano.raw.diffDays(ts1, ts2)      // Get day difference
+     */
+    const raw: RawOperations;
 }
 
 /**

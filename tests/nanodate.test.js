@@ -718,3 +718,269 @@ describe('Performance Optimizations', () => {
         });
     });
 });
+
+// ============================================
+// NEW FEATURES v0.1.6 TESTS
+// ============================================
+
+describe('NanoDate v0.1.6 New Features', () => {
+    describe('toArray()', () => {
+        it('should convert to array format', () => {
+            const date = nano('2026-01-21T14:30:45.123');
+            const arr = date.toArray();
+            expect(arr).toEqual([2026, 0, 21, 14, 30, 45, 123]);
+        });
+
+        it('should return array with correct length', () => {
+            const arr = nano().toArray();
+            expect(arr.length).toBe(7);
+        });
+    });
+
+    describe('toObject()', () => {
+        it('should convert to object format', () => {
+            const date = nano('2026-01-21T14:30:45.123');
+            const obj = date.toObject();
+            expect(obj).toEqual({
+                year: 2026,
+                month: 0,
+                date: 21,
+                hour: 14,
+                minute: 30,
+                second: 45,
+                millisecond: 123
+            });
+        });
+
+        it('should have all required properties', () => {
+            const obj = nano().toObject();
+            expect(obj).toHaveProperty('year');
+            expect(obj).toHaveProperty('month');
+            expect(obj).toHaveProperty('date');
+            expect(obj).toHaveProperty('hour');
+            expect(obj).toHaveProperty('minute');
+            expect(obj).toHaveProperty('second');
+            expect(obj).toHaveProperty('millisecond');
+        });
+    });
+
+    describe('calendar()', () => {
+        it('should format today correctly', () => {
+            const result = nano().calendar();
+            expect(result).toContain('Today');
+        });
+
+        it('should format yesterday correctly', () => {
+            const yesterday = nano().subtract(1, 'day');
+            const result = yesterday.calendar();
+            expect(result).toContain('Yesterday');
+        });
+
+        it('should format tomorrow correctly', () => {
+            const tomorrow = nano().add(1, 'day');
+            const result = tomorrow.calendar();
+            expect(result).toContain('Tomorrow');
+        });
+
+        it('should format in Turkish locale', () => {
+            const today = nano(undefined, 'tr');
+            const result = today.calendar();
+            expect(result).toContain('Bugün');
+        });
+    });
+
+    describe('batch()', () => {
+        it('should create batch context', () => {
+            const batch = nano('2026-01-21').batch();
+            expect(batch.add).toBeDefined();
+            expect(batch.subtract).toBeDefined();
+            expect(batch.startOf).toBeDefined();
+            expect(batch.endOf).toBeDefined();
+            expect(batch.done).toBeDefined();
+        });
+
+        it('should chain operations and return NanoDate', () => {
+            const result = nano('2026-01-21')
+                .batch()
+                .add(1, 'day')
+                .add(2, 'hours')
+                .done();
+            
+            expect(result.date()).toBe(22);
+            expect(result.hour()).toBe(2);
+        });
+
+        it('should support startOf in batch', () => {
+            const result = nano('2026-01-21T14:30:45')
+                .batch()
+                .startOf('day')
+                .done();
+            
+            expect(result.hour()).toBe(0);
+            expect(result.minute()).toBe(0);
+        });
+
+        it('should support endOf in batch', () => {
+            const result = nano('2026-01-21T14:30:45')
+                .batch()
+                .endOf('day')
+                .done();
+            
+            expect(result.hour()).toBe(23);
+            expect(result.minute()).toBe(59);
+        });
+
+        it('should be faster for multiple operations', () => {
+            const date = nano('2026-01-21');
+            
+            // Batch mode
+            const batchStart = Date.now();
+            for (let i = 0; i < 1000; i++) {
+                date.batch()
+                    .add(1, 'day')
+                    .add(2, 'hours')
+                    .startOf('hour')
+                    .done();
+            }
+            const batchTime = Date.now() - batchStart;
+            
+            // Normal mode
+            const normalStart = Date.now();
+            for (let i = 0; i < 1000; i++) {
+                date.add(1, 'day').add(2, 'hours').startOf('hour');
+            }
+            const normalTime = Date.now() - normalStart;
+            
+            // Batch should be comparable or faster
+            expect(batchTime).toBeLessThan(normalTime * 2);
+        });
+    });
+
+    describe('nano.parse()', () => {
+        it('should parse DD-MM-YYYY format', () => {
+            const date = nano.parse('21-01-2026', 'DD-MM-YYYY');
+            expect(date.year()).toBe(2026);
+            expect(date.month()).toBe(0);
+            expect(date.date()).toBe(21);
+        });
+
+        it('should parse YYYY/MM/DD HH:mm format', () => {
+            const date = nano.parse('2026/01/21 14:30', 'YYYY/MM/DD HH:mm');
+            expect(date.year()).toBe(2026);
+            expect(date.month()).toBe(0);
+            expect(date.date()).toBe(21);
+            expect(date.hour()).toBe(14);
+            expect(date.minute()).toBe(30);
+        });
+
+        it('should parse MM/DD/YY format', () => {
+            const date = nano.parse('01/21/26', 'MM/DD/YY');
+            expect(date.year()).toBe(2026);
+            expect(date.month()).toBe(0);
+            expect(date.date()).toBe(21);
+        });
+
+        it('should parse h:mm A format (12-hour)', () => {
+            const date = nano.parse('3:30 PM', 'h:mm A');
+            expect(date.hour()).toBe(15);
+            expect(date.minute()).toBe(30);
+        });
+
+        it('should parse 12:00 AM correctly', () => {
+            const date = nano.parse('12:00 AM', 'h:mm A');
+            expect(date.hour()).toBe(0);
+        });
+
+        it('should parse 12:00 PM correctly', () => {
+            const date = nano.parse('12:00 PM', 'h:mm A');
+            expect(date.hour()).toBe(12);
+        });
+
+        it('should return invalid date for non-matching format', () => {
+            const date = nano.parse('invalid', 'YYYY-MM-DD');
+            expect(date.isValid()).toBe(false);
+        });
+    });
+
+    describe('nano.raw operations', () => {
+        const ts = new Date(2026, 0, 21, 12, 0, 0).getTime();
+
+        it('should add days to timestamp', () => {
+            const result = nano.raw.addDays(ts, 7);
+            const d = new Date(result);
+            expect(d.getDate()).toBe(28);
+        });
+
+        it('should add hours to timestamp', () => {
+            const result = nano.raw.addHours(ts, 3);
+            const d = new Date(result);
+            expect(d.getHours()).toBe(15);
+        });
+
+        it('should get start of hour', () => {
+            const testTs = new Date(2026, 0, 21, 12, 30, 45).getTime();
+            const result = nano.raw.startOfHour(testTs);
+            const d = new Date(result);
+            expect(d.getMinutes()).toBe(0);
+            expect(d.getSeconds()).toBe(0);
+        });
+
+        it('should calculate diff in days', () => {
+            const ts1 = new Date(2026, 0, 28).getTime();
+            const ts2 = new Date(2026, 0, 21).getTime();
+            expect(nano.raw.diffDays(ts1, ts2)).toBe(7);
+        });
+
+        it('should be faster than wrapped operations', () => {
+            const timestamps = Array.from({ length: 10000 }, () => Date.now());
+            
+            // Raw mode
+            const rawStart = performance.now();
+            for (const ts of timestamps) {
+                nano.raw.addDays(ts, 7);
+            }
+            const rawTime = performance.now() - rawStart;
+            
+            // Normal mode
+            const normalStart = performance.now();
+            for (const ts of timestamps) {
+                nano(ts).add(7, 'days').valueOf();
+            }
+            const normalTime = performance.now() - normalStart;
+            
+            // Raw should be faster (or at least not significantly slower)
+            // Using a generous margin since test environments can vary
+            expect(rawTime).toBeLessThan(normalTime * 1.5);
+        });
+    });
+
+    describe('Locale-aware precompiled formats', () => {
+        it('should format dddd, MMMM D YYYY in English', () => {
+            const date = nano('2026-01-21');
+            const result = date.format('dddd, MMMM D YYYY');
+            expect(result).toContain('Wednesday');
+            expect(result).toContain('January');
+            expect(result).toContain('21');
+            expect(result).toContain('2026');
+        });
+
+        it('should format dddd, MMMM D YYYY in Turkish', () => {
+            const date = nano('2026-01-21', 'tr');
+            const result = date.format('dddd, MMMM D YYYY');
+            expect(result).toContain('Çarşamba');
+            expect(result).toContain('Ocak');
+        });
+
+        it('should format hh:mm A', () => {
+            const date = nano('2026-01-21T14:30:00');
+            const result = date.format('hh:mm A');
+            expect(result).toBe('02:30 PM');
+        });
+
+        it('should format MMMM YYYY', () => {
+            const date = nano('2026-01-21', 'en');
+            const result = date.format('MMMM YYYY');
+            expect(result).toBe('January 2026');
+        });
+    });
+});

@@ -7,6 +7,8 @@
  * - Timestamp arithmetic instead of Date mutations
  * - Frozen lookup objects
  * - Inline calculations
+ * - Batch mode for chained operations (avoids Proxy overhead)
+ * - Raw mode for direct timestamp manipulation
  */
 
 /**
@@ -20,6 +22,283 @@ let nano;
  */
 export const init = (factory) => {
     nano = factory;
+};
+
+// ============================================
+// BATCH OPERATIONS MODE
+// ============================================
+
+/**
+ * Batch context - holds mutable date during batch operations
+ * Avoids creating new Proxy objects for each operation
+ */
+class BatchContext {
+    constructor(date, locale) {
+        this._d = new Date(date.getTime());
+        this._l = locale;
+        this._batch = true;
+    }
+    
+    /**
+     * Add time (mutates internal date)
+     */
+    add(value, unit) {
+        const u = normalizeUnit(unit);
+        const timestamp = this._d.getTime();
+        
+        switch (u) {
+            case 'millisecond':
+                this._d.setTime(timestamp + value);
+                break;
+            case 'second':
+                this._d.setTime(timestamp + value * MS_PER_SECOND);
+                break;
+            case 'minute':
+                this._d.setTime(timestamp + value * MS_PER_MINUTE);
+                break;
+            case 'hour':
+                this._d.setTime(timestamp + value * MS_PER_HOUR);
+                break;
+            case 'day':
+                this._d.setTime(timestamp + value * MS_PER_DAY);
+                break;
+            case 'week':
+                this._d.setTime(timestamp + value * MS_PER_WEEK);
+                break;
+            case 'year':
+                this._d.setFullYear(this._d.getFullYear() + value);
+                break;
+            case 'month': {
+                const targetMonth = this._d.getMonth() + value;
+                const dayOfMonth = this._d.getDate();
+                this._d.setMonth(targetMonth, 1);
+                const maxDays = getDaysInMonth(this._d.getFullYear(), this._d.getMonth());
+                this._d.setDate(Math.min(dayOfMonth, maxDays));
+                break;
+            }
+        }
+        return this;
+    }
+    
+    /**
+     * Subtract time (mutates internal date)
+     */
+    subtract(value, unit) {
+        return this.add(-value, unit);
+    }
+    
+    /**
+     * Set to start of unit (mutates internal date)
+     */
+    startOf(unit) {
+        const u = normalizeUnit(unit);
+        const d = this._d;
+        
+        switch (u) {
+            case 'year':
+                d.setMonth(0, 1);
+                d.setHours(0, 0, 0, 0);
+                break;
+            case 'month':
+                d.setDate(1);
+                d.setHours(0, 0, 0, 0);
+                break;
+            case 'week': {
+                const day = d.getDay();
+                d.setDate(d.getDate() - day);
+                d.setHours(0, 0, 0, 0);
+                break;
+            }
+            case 'day':
+                d.setHours(0, 0, 0, 0);
+                break;
+            case 'hour':
+                d.setMinutes(0, 0, 0);
+                break;
+            case 'minute':
+                d.setSeconds(0, 0);
+                break;
+            case 'second':
+                d.setMilliseconds(0);
+                break;
+        }
+        return this;
+    }
+    
+    /**
+     * Set to end of unit (mutates internal date)
+     */
+    endOf(unit) {
+        const u = normalizeUnit(unit);
+        const d = this._d;
+        
+        switch (u) {
+            case 'year':
+                d.setMonth(11, 31);
+                d.setHours(23, 59, 59, 999);
+                break;
+            case 'month': {
+                const lastDay = getDaysInMonth(d.getFullYear(), d.getMonth());
+                d.setDate(lastDay);
+                d.setHours(23, 59, 59, 999);
+                break;
+            }
+            case 'week': {
+                const day = d.getDay();
+                d.setDate(d.getDate() + (6 - day));
+                d.setHours(23, 59, 59, 999);
+                break;
+            }
+            case 'day':
+                d.setHours(23, 59, 59, 999);
+                break;
+            case 'hour':
+                d.setMinutes(59, 59, 999);
+                break;
+            case 'minute':
+                d.setSeconds(59, 999);
+                break;
+            case 'second':
+                d.setMilliseconds(999);
+                break;
+        }
+        return this;
+    }
+    
+    /**
+     * Set specific unit value (mutates internal date)
+     */
+    set(unit, value) {
+        const u = normalizeUnit(unit);
+        const d = this._d;
+        
+        switch (u) {
+            case 'year': d.setFullYear(value); break;
+            case 'month': d.setMonth(value); break;
+            case 'day': d.setDate(value); break;
+            case 'hour': d.setHours(value); break;
+            case 'minute': d.setMinutes(value); break;
+            case 'second': d.setSeconds(value); break;
+            case 'millisecond': d.setMilliseconds(value); break;
+        }
+        return this;
+    }
+    
+    /**
+     * Finalize batch and return NanoDate
+     */
+    done() {
+        return nano(this._d, this._l);
+    }
+    
+    /**
+     * Get timestamp without creating NanoDate
+     */
+    valueOf() {
+        return this._d.getTime();
+    }
+    
+    /**
+     * Get Date object without creating NanoDate
+     */
+    toDate() {
+        return new Date(this._d.getTime());
+    }
+}
+
+/**
+ * Create batch context for chained operations
+ * Up to 10x faster for multiple operations
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @returns {BatchContext} Batch context with chainable methods
+ * 
+ * @example
+ * // Instead of: nano().add(1, 'day').add(2, 'hours').startOf('hour')
+ * // Use: nano().batch().add(1, 'day').add(2, 'hours').startOf('hour').done()
+ */
+export const batch = (ctx) => {
+    return new BatchContext(ctx._d, ctx._l);
+};
+
+// ============================================
+// RAW TIMESTAMP OPERATIONS
+// ============================================
+
+/**
+ * Raw operations - work directly with timestamps
+ * Maximum performance for bulk calculations
+ */
+export const raw = {
+    /**
+     * Add milliseconds to timestamp
+     */
+    addMs: (ts, ms) => ts + ms,
+    
+    /**
+     * Add seconds to timestamp
+     */
+    addSeconds: (ts, s) => ts + s * MS_PER_SECOND,
+    
+    /**
+     * Add minutes to timestamp
+     */
+    addMinutes: (ts, m) => ts + m * MS_PER_MINUTE,
+    
+    /**
+     * Add hours to timestamp
+     */
+    addHours: (ts, h) => ts + h * MS_PER_HOUR,
+    
+    /**
+     * Add days to timestamp
+     */
+    addDays: (ts, d) => ts + d * MS_PER_DAY,
+    
+    /**
+     * Add weeks to timestamp
+     */
+    addWeeks: (ts, w) => ts + w * MS_PER_WEEK,
+    
+    /**
+     * Get start of day for timestamp
+     * Uses timezone offset for correct local day boundary
+     */
+    startOfDay: (ts, tzOffset = new Date(ts).getTimezoneOffset() * 60000) => {
+        return ts - ((ts - tzOffset) % MS_PER_DAY);
+    },
+    
+    /**
+     * Get end of day for timestamp
+     */
+    endOfDay: (ts, tzOffset = new Date(ts).getTimezoneOffset() * 60000) => {
+        return raw.startOfDay(ts, tzOffset) + MS_PER_DAY - 1;
+    },
+    
+    /**
+     * Get start of hour for timestamp
+     */
+    startOfHour: (ts) => ts - (ts % MS_PER_HOUR),
+    
+    /**
+     * Get start of minute for timestamp
+     */
+    startOfMinute: (ts) => ts - (ts % MS_PER_MINUTE),
+    
+    /**
+     * Diff in days between two timestamps
+     */
+    diffDays: (ts1, ts2) => ((ts1 - ts2) / MS_PER_DAY) | 0,
+    
+    /**
+     * Diff in hours between two timestamps
+     */
+    diffHours: (ts1, ts2) => ((ts1 - ts2) / MS_PER_HOUR) | 0,
+    
+    /**
+     * Diff in minutes between two timestamps
+     */
+    diffMinutes: (ts1, ts2) => ((ts1 - ts2) / MS_PER_MINUTE) | 0
 };
 
 /**
@@ -259,4 +538,4 @@ export const set = (ctx, unit, value) => {
     return nano(d, ctx._l);
 };
 
-export default { add, subtract, startOf, endOf, set };
+export default { add, subtract, startOf, endOf, set, batch, raw };

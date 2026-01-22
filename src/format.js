@@ -26,6 +26,99 @@ const pad2 = (n) => PAD2[n] || String(n).padStart(2, '0');
 const pad3 = (n) => n < 10 ? '00' + n : n < 100 ? '0' + n : String(n);
 
 /**
+ * Pre-computed locale name cache
+ * Stores weekday names and month names for fast lookup
+ * Structure: { locale: { weekdays: [...], weekdaysShort: [...], months: [...], monthsShort: [...] } }
+ */
+const localeNameCache = Object.create(null);
+
+/**
+ * Reference date for extracting locale names (Jan 1, 2024 - a Monday)
+ */
+const REF_YEAR = 2024;
+const REF_DATES = {
+    // Monday = 1, so we start from Monday (Jan 1, 2024)
+    weekdays: [1, 2, 3, 4, 5, 6, 7].map(d => new Date(2024, 0, d)), // Mon-Sun
+    months: Array.from({ length: 12 }, (_, i) => new Date(2024, i, 15))
+};
+
+/**
+ * Warm up locale cache - extract all names for a locale
+ * @param {string} locale - Locale string
+ */
+const warmLocaleCache = (locale) => {
+    if (localeNameCache[locale]) return localeNameCache[locale];
+    
+    const cache = {
+        weekdays: [],      // dddd - Sunday, Monday...
+        weekdaysShort: [], // ddd - Sun, Mon...
+        weekdaysMin: [],   // dd - Su, Mo...
+        months: [],        // MMMM - January, February...
+        monthsShort: []    // MMM - Jan, Feb...
+    };
+    
+    try {
+        // Weekday formatters
+        const wdLong = new Intl.DateTimeFormat(locale, { weekday: 'long' });
+        const wdShort = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+        const wdNarrow = new Intl.DateTimeFormat(locale, { weekday: 'narrow' });
+        
+        // Month formatters  
+        const mLong = new Intl.DateTimeFormat(locale, { month: 'long' });
+        const mShort = new Intl.DateTimeFormat(locale, { month: 'short' });
+        
+        // Extract weekday names (index 0 = Sunday for compatibility)
+        // REF_DATES.weekdays starts from Monday, so we need to reorder
+        const weekdayDates = [
+            new Date(2024, 0, 7),  // Sunday
+            new Date(2024, 0, 1),  // Monday
+            new Date(2024, 0, 2),  // Tuesday
+            new Date(2024, 0, 3),  // Wednesday
+            new Date(2024, 0, 4),  // Thursday
+            new Date(2024, 0, 5),  // Friday
+            new Date(2024, 0, 6)   // Saturday
+        ];
+        
+        for (let i = 0; i < 7; i++) {
+            cache.weekdays[i] = wdLong.format(weekdayDates[i]);
+            cache.weekdaysShort[i] = wdShort.format(weekdayDates[i]);
+            cache.weekdaysMin[i] = wdNarrow.format(weekdayDates[i]);
+        }
+        
+        // Extract month names (index 0 = January)
+        for (let i = 0; i < 12; i++) {
+            cache.months[i] = mLong.format(REF_DATES.months[i]);
+            cache.monthsShort[i] = mShort.format(REF_DATES.months[i]);
+        }
+    } catch {
+        // Fallback to English
+        cache.weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        cache.weekdaysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        cache.weekdaysMin = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+        cache.months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        cache.monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    }
+    
+    localeNameCache[locale] = cache;
+    return cache;
+};
+
+/**
+ * Get locale names from cache
+ * @param {string} locale - Locale string
+ * @returns {Object} Cache object with weekdays and months
+ */
+const getLocaleNames = (locale) => {
+    return localeNameCache[locale] || warmLocaleCache(locale);
+};
+
+// Warm up common locales at module load for instant access
+const COMMON_LOCALES = ['en', 'en-US', 'en-GB', 'tr', 'tr-TR', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'zh', 'ko', 'ar', 'ru'];
+COMMON_LOCALES.forEach(loc => {
+    try { warmLocaleCache(loc); } catch {}
+});
+
+/**
  * Precompiled format functions for common patterns
  * These bypass regex parsing for maximum performance (~10x faster)
  */
@@ -42,6 +135,9 @@ const PRECOMPILED = {
     'HH:mm': (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes()),
     'HH:mm:ss': (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()),
     'HH:mm:ss.SSS': (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' + pad3(d.getMilliseconds()),
+    'hh:mm A': (d) => pad2(d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
+    'h:mm A': (d) => (d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
+    'hh:mm:ss A': (d) => pad2(d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
     
     // DateTime formats
     'YYYY-MM-DDTHH:mm:ss': (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()),
@@ -72,6 +168,81 @@ const PRECOMPILED = {
     'ISO': (d) => d.toISOString(),
     'X': (d) => String((d.getTime() / 1000) | 0),  // Unix timestamp (seconds)
     'x': (d) => String(d.getTime())  // Unix timestamp (milliseconds)
+};
+
+/**
+ * Locale-aware precompiled format functions
+ * Returns formatter function for locale-dependent formats
+ */
+const getLocalePrecompiled = (fmt, locale) => {
+    const key = fmt + '|' + locale;
+    if (compiledCache[key]) return compiledCache[key];
+    
+    const names = getLocaleNames(locale);
+    let fn = null;
+    
+    switch (fmt) {
+        case 'dddd, MMMM D YYYY':
+            fn = (d) => names.weekdays[d.getDay()] + ', ' + names.months[d.getMonth()] + ' ' + d.getDate() + ' ' + d.getFullYear();
+            break;
+        case 'dddd, MMMM Do YYYY':
+            fn = (d) => names.weekdays[d.getDay()] + ', ' + names.months[d.getMonth()] + ' ' + ord(d.getDate()) + ' ' + d.getFullYear();
+            break;
+        case 'dddd, D MMMM YYYY':
+            fn = (d) => names.weekdays[d.getDay()] + ', ' + d.getDate() + ' ' + names.months[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+        case 'ddd, MMM D YYYY':
+            fn = (d) => names.weekdaysShort[d.getDay()] + ', ' + names.monthsShort[d.getMonth()] + ' ' + d.getDate() + ' ' + d.getFullYear();
+            break;
+        case 'ddd, D MMM YYYY':
+            fn = (d) => names.weekdaysShort[d.getDay()] + ', ' + d.getDate() + ' ' + names.monthsShort[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+        case 'MMMM D, YYYY':
+            fn = (d) => names.months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+            break;
+        case 'D MMMM YYYY':
+            fn = (d) => d.getDate() + ' ' + names.months[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+        case 'MMM D, YYYY':
+            fn = (d) => names.monthsShort[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+            break;
+        case 'D MMM YYYY':
+            fn = (d) => d.getDate() + ' ' + names.monthsShort[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+        case 'dddd':
+            fn = (d) => names.weekdays[d.getDay()];
+            break;
+        case 'ddd':
+            fn = (d) => names.weekdaysShort[d.getDay()];
+            break;
+        case 'MMMM':
+            fn = (d) => names.months[d.getMonth()];
+            break;
+        case 'MMM':
+            fn = (d) => names.monthsShort[d.getMonth()];
+            break;
+        case 'MMMM YYYY':
+            fn = (d) => names.months[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+        case 'MMM YYYY':
+            fn = (d) => names.monthsShort[d.getMonth()] + ' ' + d.getFullYear();
+            break;
+    }
+    
+    if (fn) {
+        // Cache the compiled function
+        if (compiledCacheSize >= MAX_COMPILED_CACHE) {
+            const keys = Object.keys(compiledCache);
+            for (let i = 0; i < keys.length / 2; i++) {
+                delete compiledCache[keys[i]];
+            }
+            compiledCacheSize = keys.length / 2;
+        }
+        compiledCache[key] = fn;
+        compiledCacheSize++;
+    }
+    
+    return fn;
 };
 
 /**
@@ -352,9 +523,31 @@ const formatToken = (token, date, locale) => {
         // Timezone
         case 'Z': return getOffset(date, true);
         case 'ZZ': return getOffset(date, false);
+        
+        // Fast path: locale-dependent tokens using cached names
+        case 'dddd': {
+            const names = getLocaleNames(locale);
+            return names.weekdays[date.getDay()];
+        }
+        case 'ddd': {
+            const names = getLocaleNames(locale);
+            return names.weekdaysShort[date.getDay()];
+        }
+        case 'dd': {
+            const names = getLocaleNames(locale);
+            return names.weekdaysMin[date.getDay()];
+        }
+        case 'MMMM': {
+            const names = getLocaleNames(locale);
+            return names.months[date.getMonth()];
+        }
+        case 'MMM': {
+            const names = getLocaleNames(locale);
+            return names.monthsShort[date.getMonth()];
+        }
     }
     
-    // Slow path: locale-dependent tokens (month names, weekday names)
+    // Slow path: other locale-dependent tokens
     const opt = T[token];
     if (!opt) return token;
 
@@ -385,6 +578,12 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
     // Check for precompiled format first (fastest path)
     if (PRECOMPILED[fmt]) {
         return PRECOMPILED[fmt](date);
+    }
+    
+    // Check for locale-aware precompiled format (second fastest path)
+    const localePrecompiled = getLocalePrecompiled(fmt, locale);
+    if (localePrecompiled) {
+        return localePrecompiled(date);
     }
 
     // Preset format kontrolü (short, medium, long, full)
@@ -419,28 +618,164 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
 
 /**
  * Parse a date string with a given format
- * (Basic implementation for common patterns)
+ * Supports common format patterns
  * 
  * @param {string} dateStr - Date string to parse
  * @param {string} fmt - Format string
  * @param {string} [locale] - Locale
+ * @param {Function} nanoFactory - nano factory function
  * @returns {Proxy} NanoDate instance
  */
-export const parse = (dateStr, fmt, locale) => {
-    // ISO format shortcut
-    if (fmt === 'YYYY-MM-DD' || fmt === 'YYYY-MM-DDTHH:mm:ss') {
-        const d = new Date(dateStr);
-        if (!isNaN(d)) {
-            // Dynamic import ile circular dependency önle
-            const { nano } = require('./index.js');
-            return nano(d, locale);
+export const parse = (dateStr, fmt, locale, nanoFactory) => {
+    if (!dateStr || !fmt) {
+        return nanoFactory(new Date(NaN), locale);
+    }
+    
+    // Token definitions with regex patterns
+    const tokenDefs = {
+        YYYY: { pattern: '(\\d{4})', type: 'year4' },
+        YY: { pattern: '(\\d{2})', type: 'year2' },
+        MM: { pattern: '(\\d{2})', type: 'month' },
+        M: { pattern: '(\\d{1,2})', type: 'month' },
+        DD: { pattern: '(\\d{2})', type: 'day' },
+        D: { pattern: '(\\d{1,2})', type: 'day' },
+        HH: { pattern: '(\\d{2})', type: 'hour24' },
+        H: { pattern: '(\\d{1,2})', type: 'hour24' },
+        hh: { pattern: '(\\d{2})', type: 'hour12' },
+        h: { pattern: '(\\d{1,2})', type: 'hour12' },
+        mm: { pattern: '(\\d{2})', type: 'minute' },
+        m: { pattern: '(\\d{1,2})', type: 'minute' },
+        ss: { pattern: '(\\d{2})', type: 'second' },
+        s: { pattern: '(\\d{1,2})', type: 'second' },
+        SSS: { pattern: '(\\d{3})', type: 'ms' },
+        A: { pattern: '(AM|PM)', type: 'ampm' },
+        a: { pattern: '(am|pm)', type: 'ampm' }
+    };
+    
+    // Find all tokens in the format string and their positions
+    const tokens = [];
+    let tempFmt = fmt;
+    
+    // Token search order - longest first to avoid partial matches
+    const searchOrder = ['YYYY', 'SSS', 'MM', 'DD', 'HH', 'hh', 'mm', 'ss', 'YY', 'M', 'D', 'H', 'h', 'm', 's', 'A', 'a'];
+    
+    for (const token of searchOrder) {
+        let idx = tempFmt.indexOf(token);
+        while (idx !== -1) {
+            tokens.push({ token, pos: idx, ...tokenDefs[token] });
+            // Replace with placeholder to avoid re-matching
+            tempFmt = tempFmt.substring(0, idx) + '\x00'.repeat(token.length) + tempFmt.substring(idx + token.length);
+            idx = tempFmt.indexOf(token);
         }
     }
-
-    // Fallback: native Date parsing
-    const d = new Date(dateStr);
-    const { nano } = require('./index.js');
-    return nano(d, locale);
+    
+    // Sort by position
+    tokens.sort((a, b) => a.pos - b.pos);
+    
+    // Build regex from format string
+    let regexStr = '';
+    let lastEnd = 0;
+    
+    for (const t of tokens) {
+        // Add literal text before this token (escaped)
+        if (t.pos > lastEnd) {
+            const literal = fmt.substring(lastEnd, t.pos);
+            regexStr += literal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        }
+        // Add token pattern
+        regexStr += t.pattern;
+        lastEnd = t.pos + t.token.length;
+    }
+    
+    // Add remaining literal text
+    if (lastEnd < fmt.length) {
+        const literal = fmt.substring(lastEnd);
+        regexStr += literal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    }
+    
+    try {
+        const regex = new RegExp('^' + regexStr + '$', 'i');
+        const match = dateStr.match(regex);
+        
+        if (!match) {
+            return nanoFactory(new Date(NaN), locale);
+        }
+        
+        // Extract values
+        const values = {
+            year: new Date().getFullYear(),
+            month: 0,
+            day: 1,
+            hour: 0,
+            minute: 0,
+            second: 0,
+            millisecond: 0,
+            isPM: null,
+            is12Hour: false
+        };
+        
+        for (let i = 0; i < tokens.length; i++) {
+            const { type } = tokens[i];
+            const value = match[i + 1];
+            
+            switch (type) {
+                case 'year4':
+                    values.year = parseInt(value, 10);
+                    break;
+                case 'year2':
+                    values.year = 2000 + parseInt(value, 10);
+                    break;
+                case 'month':
+                    values.month = parseInt(value, 10) - 1;
+                    break;
+                case 'day':
+                    values.day = parseInt(value, 10);
+                    break;
+                case 'hour24':
+                    values.hour = parseInt(value, 10);
+                    break;
+                case 'hour12':
+                    values.hour = parseInt(value, 10);
+                    values.is12Hour = true;
+                    break;
+                case 'minute':
+                    values.minute = parseInt(value, 10);
+                    break;
+                case 'second':
+                    values.second = parseInt(value, 10);
+                    break;
+                case 'ms':
+                    values.millisecond = parseInt(value, 10);
+                    break;
+                case 'ampm':
+                    values.isPM = value.toLowerCase() === 'pm';
+                    break;
+            }
+        }
+        
+        // Handle 12-hour format with AM/PM
+        if (values.is12Hour && values.isPM !== null) {
+            if (values.isPM && values.hour < 12) {
+                values.hour += 12;
+            } else if (!values.isPM && values.hour === 12) {
+                values.hour = 0;
+            }
+        }
+        
+        const d = new Date(
+            values.year,
+            values.month,
+            values.day,
+            values.hour,
+            values.minute,
+            values.second,
+            values.millisecond
+        );
+        
+        return nanoFactory(d, locale);
+    } catch {
+        return nanoFactory(new Date(NaN), locale);
+    }
 };
 
 export default format;
