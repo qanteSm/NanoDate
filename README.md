@@ -28,12 +28,11 @@
 | | Moment.js | Day.js | Luxon | 🏆 NanoDate |
 |---|---|---|---|---|
 | **Core Size** | ❌ 72 KB | ⚠️ 2 KB | ❌ 23 KB | ✅ **0.69 KB (Lite)** |
-| **+ Turkish** | + 3 KB | + 1 KB | + 0 KB | **+ 0 KB** |
-| **+ Japanese** | + 4 KB | + 1 KB | + 0 KB | **+ 0 KB** |
-| **All 400+ Langs** | 😱 ~350 KB | 😰 ~100 KB | ⚠️ ~23 KB | 🎉 **0.69 KB** |
+| **All-in-One** | 😱 ~350 KB | 😰 ~100 KB | ⚠️ ~23 KB | 🎉 **< 10.5 KB (Full)** |
+| **Locales (400+)** | Included | External | Built-in | ✅ **0 KB (Native)** |
 | **Timezone Data** | + 40 KB | + 40 KB | Built-in | ✅ **0 KB (Native)** |
 
-> **How is this possible?** NanoDate uses the browser's built-in `Intl` API instead of bundling locale data. Your browser already knows how to say "January" in 400+ languages! 🌍
+> **Don't bury the lede:** NanoDate handles 400+ locales and timezones with **zero extra payload**. While other libraries grow significantly once you add plugins for real-world features, NanoDate's full bundle stays under **10.5 KB** while providing all functionality out-of-the-box using the native Intl API.
 
 ---
 
