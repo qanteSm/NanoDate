@@ -3,134 +3,68 @@
  * High-performance duration representation and manipulation
  * 
  * Optimizations:
- * - Pre-computed millisecond constants
- * - Inline calculations
+ * - Shared constants from constants.js
+ * - Intl.RelativeTimeFormat for zero-locale-payload localization
  * - Lazy formatting
  * - Zero-allocation arithmetic
  */
 
-// ============================================
-// CONSTANTS
-// ============================================
+import {
+    MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY, MS_PER_WEEK,
+    MS_PER_MONTH, MS_PER_YEAR
+} from './constants.js';
 
-const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = 60000;
-const MS_PER_HOUR = 3600000;
-const MS_PER_DAY = 86400000;
-const MS_PER_WEEK = 604800000;
-const MS_PER_MONTH = 2629746000; // Average month (30.44 days)
-const MS_PER_YEAR = 31556952000; // Average year (365.25 days)
+// ============================================
+// INTL-BASED LOCALIZATION
+// ============================================
 
 /**
- * Unit names cache by locale
+ * RTF cache for performance - creating RTF instances is expensive
  */
-const unitNamesCache = Object.create(null);
+const rtfCache = Object.create(null);
 
 /**
- * Get localized unit names
+ * Format duration unit using Intl.RelativeTimeFormat
+ * Zero locale payload - supports ALL languages automatically
+ * 
  * @param {string} locale - Locale string
- * @returns {Object} Unit names
+ * @param {string} unit - Unit name (year, month, day, hour, minute, second)
+ * @param {number} value - Value for pluralization
+ * @returns {string} Formatted string like "5 gün" or "1 year"
  */
-const getUnitNames = (locale) => {
-    if (unitNamesCache[locale]) return unitNamesCache[locale];
-    
-    const lang = locale.split('-')[0];
-    
-    const names = {
-        en: {
-            year: 'year', years: 'years',
-            month: 'month', months: 'months',
-            week: 'week', weeks: 'weeks',
-            day: 'day', days: 'days',
-            hour: 'hour', hours: 'hours',
-            minute: 'minute', minutes: 'minutes',
-            second: 'second', seconds: 'seconds'
-        },
-        tr: {
-            year: 'yıl', years: 'yıl',
-            month: 'ay', months: 'ay',
-            week: 'hafta', weeks: 'hafta',
-            day: 'gün', days: 'gün',
-            hour: 'saat', hours: 'saat',
-            minute: 'dakika', minutes: 'dakika',
-            second: 'saniye', seconds: 'saniye'
-        },
-        de: {
-            year: 'Jahr', years: 'Jahre',
-            month: 'Monat', months: 'Monate',
-            week: 'Woche', weeks: 'Wochen',
-            day: 'Tag', days: 'Tage',
-            hour: 'Stunde', hours: 'Stunden',
-            minute: 'Minute', minutes: 'Minuten',
-            second: 'Sekunde', seconds: 'Sekunden'
-        },
-        fr: {
-            year: 'an', years: 'ans',
-            month: 'mois', months: 'mois',
-            week: 'semaine', weeks: 'semaines',
-            day: 'jour', days: 'jours',
-            hour: 'heure', hours: 'heures',
-            minute: 'minute', minutes: 'minutes',
-            second: 'seconde', seconds: 'secondes'
-        },
-        es: {
-            year: 'año', years: 'años',
-            month: 'mes', months: 'meses',
-            week: 'semana', weeks: 'semanas',
-            day: 'día', days: 'días',
-            hour: 'hora', hours: 'horas',
-            minute: 'minuto', minutes: 'minutos',
-            second: 'segundo', seconds: 'segundos'
-        },
-        ja: {
-            year: '年', years: '年',
-            month: 'ヶ月', months: 'ヶ月',
-            week: '週間', weeks: '週間',
-            day: '日', days: '日',
-            hour: '時間', hours: '時間',
-            minute: '分', minutes: '分',
-            second: '秒', seconds: '秒'
-        },
-        zh: {
-            year: '年', years: '年',
-            month: '个月', months: '个月',
-            week: '周', weeks: '周',
-            day: '天', days: '天',
-            hour: '小时', hours: '小时',
-            minute: '分钟', minutes: '分钟',
-            second: '秒', seconds: '秒'
-        },
-        ko: {
-            year: '년', years: '년',
-            month: '개월', months: '개월',
-            week: '주', weeks: '주',
-            day: '일', days: '일',
-            hour: '시간', hours: '시간',
-            minute: '분', minutes: '분',
-            second: '초', seconds: '초'
-        },
-        ar: {
-            year: 'سنة', years: 'سنوات',
-            month: 'شهر', months: 'أشهر',
-            week: 'أسبوع', weeks: 'أسابيع',
-            day: 'يوم', days: 'أيام',
-            hour: 'ساعة', hours: 'ساعات',
-            minute: 'دقيقة', minutes: 'دقائق',
-            second: 'ثانية', seconds: 'ثواني'
-        },
-        ru: {
-            year: 'год', years: 'лет',
-            month: 'месяц', months: 'месяцев',
-            week: 'неделя', weeks: 'недель',
-            day: 'день', days: 'дней',
-            hour: 'час', hours: 'часов',
-            minute: 'минута', minutes: 'минут',
-            second: 'секунда', seconds: 'секунд'
+const formatDurationUnit = (locale, unit, value) => {
+    const abs = Math.abs(value);
+    const cacheKey = locale;
+
+    try {
+        // Get or create cached RTF
+        let rtf = rtfCache[cacheKey];
+        if (!rtf) {
+            rtf = new Intl.RelativeTimeFormat(locale, {
+                numeric: 'always',
+                style: 'long'
+            });
+            rtfCache[cacheKey] = rtf;
         }
-    };
-    
-    unitNamesCache[locale] = names[lang] || names.en;
-    return unitNamesCache[locale];
+
+        // Format using RTF and extract parts
+        // "in 5 days" or "5 days ago" -> extract "5 days" part
+        const parts = rtf.formatToParts(abs, unit);
+
+        // Build string from integer + literal parts only
+        let result = '';
+        for (const p of parts) {
+            if (p.type === 'integer' || p.type === 'literal') {
+                result += p.value;
+            }
+        }
+
+        // Clean up and return (e.g., "5 days" or "5 gün")
+        return result.trim();
+    } catch {
+        // Fallback for environments without Intl support
+        return abs + ' ' + unit + (abs !== 1 ? 's' : '');
+    }
 };
 
 /**
@@ -159,7 +93,7 @@ class Duration {
      */
     static toMilliseconds(obj) {
         let ms = 0;
-        
+
         if (obj.years || obj.year || obj.y) {
             ms += (obj.years || obj.year || obj.y) * MS_PER_YEAR;
         }
@@ -184,7 +118,7 @@ class Duration {
         if (obj.milliseconds || obj.millisecond || obj.ms) {
             ms += (obj.milliseconds || obj.millisecond || obj.ms);
         }
-        
+
         return ms;
     }
 
@@ -448,7 +382,7 @@ class Duration {
     toObject() {
         const abs = Math.abs(this._ms);
         const sign = this._ms < 0 ? -1 : 1;
-        
+
         return {
             years: Math.floor(abs / MS_PER_YEAR) * sign,
             months: Math.floor((abs % MS_PER_YEAR) / MS_PER_MONTH) * sign,
@@ -467,12 +401,12 @@ class Duration {
     toISOString() {
         const obj = this.toObject();
         let result = this._ms < 0 ? '-P' : 'P';
-        
+
         // Date components
         if (obj.years) result += Math.abs(obj.years) + 'Y';
         if (obj.months) result += Math.abs(obj.months) + 'M';
         if (obj.days) result += Math.abs(obj.days) + 'D';
-        
+
         // Time components
         const hasTime = obj.hours || obj.minutes || obj.seconds || obj.milliseconds;
         if (hasTime) {
@@ -484,59 +418,49 @@ class Duration {
                 result += secs + 'S';
             }
         }
-        
+
         // Handle zero duration
         if (result === 'P' || result === '-P') {
             return 'PT0S';
         }
-        
+
         return result;
     }
 
     /**
-     * Human-readable format
+     * Human-readable format using Intl.RelativeTimeFormat
+     * Supports ALL languages automatically with zero locale payload
+     * 
      * @param {string} [locale='en'] - Locale for formatting
      * @returns {string} Human readable string
      */
     humanize(locale = 'en') {
         const abs = Math.abs(this._ms);
         const prefix = this._ms < 0 ? '-' : '';
-        
-        // Use Intl.NumberFormat for pluralization support
-        const nf = new Intl.NumberFormat(locale);
-        
-        // Unit names by locale
-        const units = getUnitNames(locale);
-        
+
+        // Threshold-based unit selection with Intl-powered formatting
         if (abs >= MS_PER_YEAR) {
-            const years = Math.round(abs / MS_PER_YEAR);
-            return prefix + nf.format(years) + ' ' + (years === 1 ? units.year : units.years);
+            return prefix + formatDurationUnit(locale, 'year', Math.round(abs / MS_PER_YEAR));
         }
         if (abs >= MS_PER_MONTH) {
-            const months = Math.round(abs / MS_PER_MONTH);
-            return prefix + nf.format(months) + ' ' + (months === 1 ? units.month : units.months);
+            return prefix + formatDurationUnit(locale, 'month', Math.round(abs / MS_PER_MONTH));
         }
         if (abs >= MS_PER_WEEK) {
-            const weeks = Math.round(abs / MS_PER_WEEK);
-            return prefix + nf.format(weeks) + ' ' + (weeks === 1 ? units.week : units.weeks);
+            return prefix + formatDurationUnit(locale, 'week', Math.round(abs / MS_PER_WEEK));
         }
         if (abs >= MS_PER_DAY) {
-            const days = Math.round(abs / MS_PER_DAY);
-            return prefix + nf.format(days) + ' ' + (days === 1 ? units.day : units.days);
+            return prefix + formatDurationUnit(locale, 'day', Math.round(abs / MS_PER_DAY));
         }
         if (abs >= MS_PER_HOUR) {
-            const hours = Math.round(abs / MS_PER_HOUR);
-            return prefix + nf.format(hours) + ' ' + (hours === 1 ? units.hour : units.hours);
+            return prefix + formatDurationUnit(locale, 'hour', Math.round(abs / MS_PER_HOUR));
         }
         if (abs >= MS_PER_MINUTE) {
-            const minutes = Math.round(abs / MS_PER_MINUTE);
-            return prefix + nf.format(minutes) + ' ' + (minutes === 1 ? units.minute : units.minutes);
+            return prefix + formatDurationUnit(locale, 'minute', Math.round(abs / MS_PER_MINUTE));
         }
         if (abs >= MS_PER_SECOND) {
-            const seconds = Math.round(abs / MS_PER_SECOND);
-            return prefix + nf.format(seconds) + ' ' + (seconds === 1 ? units.second : units.seconds);
+            return prefix + formatDurationUnit(locale, 'second', Math.round(abs / MS_PER_SECOND));
         }
-        
+
         return prefix + abs + ' ms';
     }
 
@@ -556,7 +480,7 @@ class Duration {
             s: Math.abs(obj.seconds),
             S: Math.abs(obj.milliseconds)
         };
-        
+
         return format
             .replace(/YYYY|YY/g, String(abs.y).padStart(4, '0'))
             .replace(/MM/g, String(abs.M).padStart(2, '0'))
@@ -613,12 +537,12 @@ export const duration = (input, unit) => {
         const obj = { [unit]: input };
         return new Duration(obj);
     }
-    
+
     // ISO 8601 string parsing
     if (typeof input === 'string') {
         return parseISO8601Duration(input);
     }
-    
+
     return new Duration(input);
 };
 
@@ -630,11 +554,11 @@ export const duration = (input, unit) => {
 const parseISO8601Duration = (str) => {
     const regex = /^(-)?P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
     const match = str.match(regex);
-    
+
     if (!match) {
         return new Duration(0);
     }
-    
+
     const sign = match[1] ? -1 : 1;
     const years = parseInt(match[2] || 0, 10);
     const months = parseInt(match[3] || 0, 10);
@@ -643,7 +567,7 @@ const parseISO8601Duration = (str) => {
     const hours = parseInt(match[6] || 0, 10);
     const minutes = parseInt(match[7] || 0, 10);
     const seconds = parseFloat(match[8] || 0);
-    
+
     const ms = sign * (
         years * MS_PER_YEAR +
         months * MS_PER_MONTH +
@@ -653,7 +577,7 @@ const parseISO8601Duration = (str) => {
         minutes * MS_PER_MINUTE +
         seconds * MS_PER_SECOND
     );
-    
+
     return new Duration(ms);
 };
 

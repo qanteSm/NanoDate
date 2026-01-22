@@ -11,6 +11,11 @@
  * - Raw mode for direct timestamp manipulation
  */
 
+import {
+    MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY, MS_PER_WEEK,
+    UNIT_MAP, normalizeUnit, getDaysInMonth, isLeapYear, DAYS_IN_MONTH
+} from './constants.js';
+
 /**
  * NanoDate factory placeholder
  */
@@ -38,14 +43,14 @@ class BatchContext {
         this._l = locale;
         this._batch = true;
     }
-    
+
     /**
      * Add time (mutates internal date)
      */
     add(value, unit) {
         const u = normalizeUnit(unit);
         const timestamp = this._d.getTime();
-        
+
         switch (u) {
             case 'millisecond':
                 this._d.setTime(timestamp + value);
@@ -79,21 +84,21 @@ class BatchContext {
         }
         return this;
     }
-    
+
     /**
      * Subtract time (mutates internal date)
      */
     subtract(value, unit) {
         return this.add(-value, unit);
     }
-    
+
     /**
      * Set to start of unit (mutates internal date)
      */
     startOf(unit) {
         const u = normalizeUnit(unit);
         const d = this._d;
-        
+
         switch (u) {
             case 'year':
                 d.setMonth(0, 1);
@@ -137,14 +142,14 @@ class BatchContext {
         }
         return this;
     }
-    
+
     /**
      * Set to end of unit (mutates internal date)
      */
     endOf(unit) {
         const u = normalizeUnit(unit);
         const d = this._d;
-        
+
         switch (u) {
             case 'year':
                 d.setMonth(11, 31);
@@ -184,14 +189,14 @@ class BatchContext {
         }
         return this;
     }
-    
+
     /**
      * Set specific unit value (mutates internal date)
      */
     set(unit, value) {
         const u = normalizeUnit(unit);
         const d = this._d;
-        
+
         switch (u) {
             case 'year': d.setFullYear(value); break;
             case 'month': d.setMonth(value); break;
@@ -203,21 +208,21 @@ class BatchContext {
         }
         return this;
     }
-    
+
     /**
      * Finalize batch and return NanoDate
      */
     done() {
         return nano(this._d, this._l);
     }
-    
+
     /**
      * Get timestamp without creating NanoDate
      */
     valueOf() {
         return this._d.getTime();
     }
-    
+
     /**
      * Get Date object without creating NanoDate
      */
@@ -242,6 +247,147 @@ export const batch = (ctx) => {
 };
 
 // ============================================
+// FLUENT CHAIN HELPER
+// ============================================
+
+/**
+ * Pure timestamp arithmetic for chain operations
+ * Avoids Date object creation for time-based units
+ * @private
+ */
+const addToTimestamp = (ts, value, unit) => {
+    const u = normalizeUnit(unit);
+    switch (u) {
+        case 'millisecond': return ts + value;
+        case 'second': return ts + value * MS_PER_SECOND;
+        case 'minute': return ts + value * MS_PER_MINUTE;
+        case 'hour': return ts + value * MS_PER_HOUR;
+        case 'day': return ts + value * MS_PER_DAY;
+        case 'week': return ts + value * MS_PER_WEEK;
+        case 'year': {
+            const d = new Date(ts);
+            d.setFullYear(d.getFullYear() + value);
+            return d.getTime();
+        }
+        case 'month': {
+            const d = new Date(ts);
+            const dayOfMonth = d.getDate();
+            d.setMonth(d.getMonth() + value, 1);
+            const maxDays = getDaysInMonth(d.getFullYear(), d.getMonth());
+            d.setDate(Math.min(dayOfMonth, maxDays));
+            return d.getTime();
+        }
+        default: return ts;
+    }
+};
+
+/**
+ * Singleton chain builder - ZERO ALLOCATION after first use
+ * Reuses the same builder object for maximum performance
+ * 
+ * WARNING: Chain operations are synchronous. Do NOT insert
+ * async/await between chain calls.
+ * 
+ * @private
+ */
+const ChainBuilder = {
+    _ts: 0,
+    _l: null,
+
+    /**
+     * Initialize builder with context
+     * @param {Object} ctx - NanoDate context
+     * @returns {ChainBuilder} this for chaining
+     */
+    _init(ctx) {
+        this._ts = ctx._d.getTime();
+        this._l = ctx._l;
+        return this;
+    },
+
+    /**
+     * Add time to timestamp
+     * @param {number} value - Amount to add
+     * @param {string} unit - Time unit
+     * @returns {ChainBuilder} this for chaining
+     */
+    add(value, unit) {
+        this._ts = addToTimestamp(this._ts, value, unit);
+        return this;
+    },
+
+    /**
+     * Subtract time from timestamp
+     * @param {number} value - Amount to subtract
+     * @param {string} unit - Time unit
+     * @returns {ChainBuilder} this for chaining
+     */
+    subtract(value, unit) {
+        this._ts = addToTimestamp(this._ts, -value, unit);
+        return this;
+    },
+
+    /**
+     * Create NanoDate from final timestamp
+     * @returns {Proxy} NanoDate instance
+     */
+    value() {
+        return nano(this._ts, this._l);
+    },
+
+    /**
+     * Get raw timestamp (primitive return - no allocation)
+     * @returns {number} Timestamp in milliseconds
+     */
+    timestamp() {
+        return this._ts;
+    },
+
+    /**
+     * Alias for timestamp() - primitive return
+     * @returns {number} Timestamp in milliseconds
+     */
+    toNumber() {
+        return this._ts;
+    },
+
+    /**
+     * Get valueOf for Date math
+     * @returns {number} Timestamp in milliseconds
+     */
+    valueOf() {
+        return this._ts;
+    },
+
+    /**
+     * Create native Date from final timestamp
+     * @returns {Date} Native Date object
+     */
+    toDate() {
+        return new Date(this._ts);
+    }
+};
+
+/**
+ * Ultra-fast fluent chain with ZERO ALLOCATION
+ * Uses singleton builder pattern - reuses same object
+ * 
+ * @param {Object} ctx - NanoDate context
+ * @returns {ChainBuilder} Singleton chain builder
+ * 
+ * @example
+ * // Fast chained operations - creates only 1 NanoDate at the end
+ * nano().chain().add(1,'day').add(2,'hours').subtract(30,'minutes').value()
+ * 
+ * // Get raw timestamp without any object creation
+ * const ts = nano().chain().add(7,'days').toNumber()
+ * 
+ * // WARNING: Do not use async between chain calls
+ * // BAD: nano().chain().add(1,'day'); await something(); .value()
+ */
+export const chain = (ctx) => ChainBuilder._init(ctx);
+
+// ============================================
 // RAW TIMESTAMP OPERATIONS
 // ============================================
 
@@ -254,32 +400,32 @@ export const raw = {
      * Add milliseconds to timestamp
      */
     addMs: (ts, ms) => ts + ms,
-    
+
     /**
      * Add seconds to timestamp
      */
     addSeconds: (ts, s) => ts + s * MS_PER_SECOND,
-    
+
     /**
      * Add minutes to timestamp
      */
     addMinutes: (ts, m) => ts + m * MS_PER_MINUTE,
-    
+
     /**
      * Add hours to timestamp
      */
     addHours: (ts, h) => ts + h * MS_PER_HOUR,
-    
+
     /**
      * Add days to timestamp
      */
     addDays: (ts, d) => ts + d * MS_PER_DAY,
-    
+
     /**
      * Add weeks to timestamp
      */
     addWeeks: (ts, w) => ts + w * MS_PER_WEEK,
-    
+
     /**
      * Get start of day for timestamp
      * Uses timezone offset for correct local day boundary
@@ -287,93 +433,42 @@ export const raw = {
     startOfDay: (ts, tzOffset = new Date(ts).getTimezoneOffset() * 60000) => {
         return ts - ((ts - tzOffset) % MS_PER_DAY);
     },
-    
+
     /**
      * Get end of day for timestamp
      */
     endOfDay: (ts, tzOffset = new Date(ts).getTimezoneOffset() * 60000) => {
         return raw.startOfDay(ts, tzOffset) + MS_PER_DAY - 1;
     },
-    
+
     /**
      * Get start of hour for timestamp
      */
     startOfHour: (ts) => ts - (ts % MS_PER_HOUR),
-    
+
     /**
      * Get start of minute for timestamp
      */
     startOfMinute: (ts) => ts - (ts % MS_PER_MINUTE),
-    
+
     /**
      * Diff in days between two timestamps
      */
     diffDays: (ts1, ts2) => ((ts1 - ts2) / MS_PER_DAY) | 0,
-    
+
     /**
      * Diff in hours between two timestamps
      */
     diffHours: (ts1, ts2) => ((ts1 - ts2) / MS_PER_HOUR) | 0,
-    
+
     /**
      * Diff in minutes between two timestamps
      */
     diffMinutes: (ts1, ts2) => ((ts1 - ts2) / MS_PER_MINUTE) | 0
 };
 
-/**
- * Unit abbreviations - frozen for performance
- */
-const UNIT_MAP = Object.freeze({
-    y: 'year', year: 'year', years: 'year',
-    Q: 'quarter', quarter: 'quarter', quarters: 'quarter',
-    M: 'month', month: 'month', months: 'month',
-    w: 'week', week: 'week', weeks: 'week',
-    isoWeek: 'isoWeek', isoWeeks: 'isoWeek',
-    d: 'day', day: 'day', days: 'day',
-    h: 'hour', hour: 'hour', hours: 'hour',
-    m: 'minute', minute: 'minute', minutes: 'minute',
-    s: 'second', second: 'second', seconds: 'second',
-    ms: 'millisecond', millisecond: 'millisecond', milliseconds: 'millisecond'
-});
-
-/**
- * Pre-computed millisecond constants
- */
-const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = 60000;
-const MS_PER_HOUR = 3600000;
-const MS_PER_DAY = 86400000;
-const MS_PER_WEEK = 604800000;
-
-/**
- * Normalize unit string - with early return for common cases
- */
-const normalizeUnit = (unit) => {
-    // Fast path for common units
-    if (unit === 'day' || unit === 'days' || unit === 'd') return 'day';
-    if (unit === 'month' || unit === 'months' || unit === 'M') return 'month';
-    if (unit === 'year' || unit === 'years' || unit === 'y') return 'year';
-    return UNIT_MAP[unit] || unit;
-};
-
-/**
- * Days in each month (non-leap year) - lookup table
- */
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-/**
- * Fast leap year check
- */
-const isLeapYear = (year) => (year & 3) === 0 && ((year % 100) !== 0 || (year % 400) === 0);
-
-/**
- * Get days in a specific month
- */
-const getDaysInMonth = (year, month) => {
-    if (month === 1) return isLeapYear(year) ? 29 : 28;
-    return DAYS_IN_MONTH[month];
-};
+// Note: UNIT_MAP, MS constants, normalizeUnit, DAYS_IN_MONTH, isLeapYear, getDaysInMonth
+// are now imported from './constants.js'
 
 /**
  * Add time to a date (immutable)
@@ -447,7 +542,7 @@ const START_OF_DAY = [0, 0, 0, 0]; // hours, minutes, seconds, ms
 export const startOf = (ctx, unit) => {
     const u = normalizeUnit(unit);
     const d = ctx._d;
-    
+
     switch (u) {
         case 'year':
             return nano(new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0), ctx._l);
@@ -584,4 +679,4 @@ export const set = (ctx, unit, value) => {
     return nano(d, ctx._l);
 };
 
-export default { add, subtract, startOf, endOf, set, batch, raw };
+export default { add, subtract, startOf, endOf, set, batch, chain, raw };

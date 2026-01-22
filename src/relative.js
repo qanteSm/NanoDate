@@ -3,6 +3,11 @@
  * Uses Intl.RelativeTimeFormat for zero-locale-payload relative times
  */
 
+import {
+    MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY, MS_PER_WEEK,
+    MS_PER_MONTH, MS_PER_YEAR
+} from './constants.js';
+
 /**
  * RelativeTimeFormat cache for performance
  * Creating RTF instances is expensive
@@ -18,11 +23,11 @@ const MAX_RTF_CACHE = 50;
 const getCachedRTF = (locale, options) => {
     // Fast key generation without JSON.stringify
     const key = locale + ':' + options.numeric + ':' + (options.style || 'long');
-    
+
     if (rtfCache[key]) {
         return rtfCache[key];
     }
-    
+
     // Limit cache size - simple eviction
     if (rtfCacheSize >= MAX_RTF_CACHE) {
         const keys = Object.keys(rtfCache);
@@ -31,7 +36,7 @@ const getCachedRTF = (locale, options) => {
         }
         rtfCacheSize = Math.floor(keys.length / 2);
     }
-    
+
     const rtf = new Intl.RelativeTimeFormat(locale, options);
     rtfCache[key] = rtf;
     rtfCacheSize++;
@@ -41,28 +46,22 @@ const getCachedRTF = (locale, options) => {
 /**
  * Time units and their divisors
  * Units are ordered from smallest to largest
- * Optimized with pre-calculated milliseconds
+ * Now using imported constants
  */
 const UNITS = [
-    { unit: 'second', ms: 1000, max: 60 },
-    { unit: 'minute', ms: 60000, max: 60 },
-    { unit: 'hour', ms: 3600000, max: 24 },
-    { unit: 'day', ms: 86400000, max: 7 },
-    { unit: 'week', ms: 604800000, max: 4.35 },
-    { unit: 'month', ms: 2629800000, max: 12 },
-    { unit: 'year', ms: 31557600000, max: Infinity }
+    { unit: 'second', ms: MS_PER_SECOND, max: 60 },
+    { unit: 'minute', ms: MS_PER_MINUTE, max: 60 },
+    { unit: 'hour', ms: MS_PER_HOUR, max: 24 },
+    { unit: 'day', ms: MS_PER_DAY, max: 7 },
+    { unit: 'week', ms: MS_PER_WEEK, max: 4.35 },
+    { unit: 'month', ms: MS_PER_MONTH, max: 12 },
+    { unit: 'year', ms: MS_PER_YEAR, max: Infinity }
 ];
 
 /**
  * Get default locale
  */
-const getLocale = (ctx) => {
-    if (ctx._l) return ctx._l;
-    if (typeof navigator !== 'undefined' && navigator.language) {
-        return navigator.language;
-    }
-    return Intl.DateTimeFormat().resolvedOptions().locale || 'en';
-};
+const getLocale = (ctx) => ctx._l || 'en';
 
 /**
  * Format relative time from now

@@ -9,6 +9,11 @@
  * - Timestamp arithmetic instead of Date object manipulation
  */
 
+import {
+    MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY, MS_PER_WEEK,
+    UNIT_MAP, normalizeUnit, isLeapYear as isLeapYearNum, DAYS_IN_MONTH, CUMULATIVE_DAYS
+} from './constants.js';
+
 /**
  * Factory placeholder for circular dependency
  */
@@ -21,49 +26,8 @@ export const initUtils = (factory) => {
     nanoFactory = factory;
 };
 
-/**
- * Unit abbreviations - frozen for performance
- */
-const UNIT_MAP = Object.freeze({
-    y: 'year', year: 'year', years: 'year',
-    M: 'month', month: 'month', months: 'month',
-    w: 'week', week: 'week', weeks: 'week',
-    d: 'day', day: 'day', days: 'day',
-    h: 'hour', hour: 'hour', hours: 'hour',
-    m: 'minute', minute: 'minute', minutes: 'minute',
-    s: 'second', second: 'second', seconds: 'second',
-    ms: 'millisecond', millisecond: 'millisecond', milliseconds: 'millisecond'
-});
-
-/**
- * Milliseconds per unit - pre-computed constants
- */
-const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = 60000;
-const MS_PER_HOUR = 3600000;
-const MS_PER_DAY = 86400000;
-const MS_PER_WEEK = 604800000;
-
-const MS = Object.freeze({
-    millisecond: 1,
-    second: MS_PER_SECOND,
-    minute: MS_PER_MINUTE,
-    hour: MS_PER_HOUR,
-    day: MS_PER_DAY,
-    week: MS_PER_WEEK
-});
-
-/**
- * Days in each month (non-leap year) - lookup table
- */
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-/**
- * Fast leap year check - using bitwise operations where possible
- */
-const isLeapYearNum = (year) => (year & 3) === 0 && ((year % 100) !== 0 || (year % 400) === 0);
-
-const normalizeUnit = (unit) => UNIT_MAP[unit] || unit;
+// Note: UNIT_MAP, MS constants, normalizeUnit, isLeapYear, DAYS_IN_MONTH
+// are now imported from './constants.js'
 
 /**
  * Get the Date object from input (NanoDate or Date or string)
@@ -270,7 +234,7 @@ const isCalendarValid = (year, month, day) => {
  */
 const parseDateString = (str) => {
     if (typeof str !== 'string') return null;
-    
+
     // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
     const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (isoMatch) {
@@ -280,7 +244,7 @@ const parseDateString = (str) => {
             day: parseInt(isoMatch[3], 10)
         };
     }
-    
+
     // Slash format: MM/DD/YYYY or DD/MM/YYYY (assume MM/DD/YYYY)
     const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (slashMatch) {
@@ -290,7 +254,7 @@ const parseDateString = (str) => {
             day: parseInt(slashMatch[2], 10)
         };
     }
-    
+
     return null;
 };
 
@@ -306,7 +270,7 @@ export const isValid = (ctx) => {
     if (!(ctx._d instanceof Date) || isNaN(ctx._d.getTime())) {
         return false;
     }
-    
+
     // If original input was a string, validate against calendar
     if (ctx._input !== undefined && typeof ctx._input === 'string') {
         const parsed = parseDateString(ctx._input);
@@ -314,19 +278,19 @@ export const isValid = (ctx) => {
             // Check if the parsed date matches what Date created
             // This catches cases like Feb 30 which JS converts to Mar 2
             const d = ctx._d;
-            const matchesInput = 
+            const matchesInput =
                 d.getFullYear() === parsed.year &&
                 (d.getMonth() + 1) === parsed.month &&
                 d.getDate() === parsed.day;
-            
+
             if (!matchesInput) {
                 return false;
             }
-            
+
             return isCalendarValid(parsed.year, parsed.month, parsed.day);
         }
     }
-    
+
     // For Date objects or timestamps, just check JS Date validity
     return true;
 };
@@ -351,9 +315,8 @@ export const daysInMonth = (ctx) => {
 
 /**
  * Get day of year (1-365/366)
- * Optimized with pre-computed cumulative days
+ * Optimized with pre-computed cumulative days from constants.js
  */
-const CUMULATIVE_DAYS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
 export const dayOfYear = (ctx) => {
     const d = ctx._d;
@@ -424,7 +387,7 @@ const toDateString = (d) => {
  */
 const buildHolidaySet = (holidays) => {
     if (!holidays || holidays.length === 0) return null;
-    
+
     const set = new Set();
     for (let i = 0; i < holidays.length; i++) {
         const h = holidays[i];
@@ -448,12 +411,12 @@ const buildHolidaySet = (holidays) => {
  */
 export const isBusinessDay = (ctx, holidays = []) => {
     const dayOfWeek = ctx._d.getDay();
-    
+
     // Weekend check (0 = Sunday, 6 = Saturday) - most common rejection
     if (dayOfWeek === 0 || dayOfWeek === 6) {
         return false;
     }
-    
+
     // Holiday check - only if holidays provided
     if (holidays.length > 0) {
         const holidaySet = buildHolidaySet(holidays);
@@ -461,7 +424,7 @@ export const isBusinessDay = (ctx, holidays = []) => {
             return false;
         }
     }
-    
+
     return true;
 };
 
@@ -480,28 +443,28 @@ export const isBusinessDay = (ctx, holidays = []) => {
 export const addBusinessDays = (ctx, days, holidays = []) => {
     // Build holiday set once
     const holidaySet = buildHolidaySet(holidays);
-    
+
     const result = new Date(ctx._d.getTime());
     let remaining = Math.abs(days);
     const direction = days >= 0 ? 1 : -1;
-    
+
     while (remaining > 0) {
         result.setDate(result.getDate() + direction);
         const dayOfWeek = result.getDay();
-        
+
         // Skip weekends
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             continue;
         }
-        
+
         // Skip holidays
         if (holidaySet && holidaySet.has(toDateString(result))) {
             continue;
         }
-        
+
         remaining--;
     }
-    
+
     return nanoFactory(result, ctx._l);
 };
 
@@ -521,30 +484,30 @@ export const diffBusinessDays = (ctx, other, holidays = []) => {
     const otherDate = toDate(other);
     const start = new Date(Math.min(ctx._d.getTime(), otherDate.getTime()));
     const end = new Date(Math.max(ctx._d.getTime(), otherDate.getTime()));
-    
+
     // Build holiday set once
     const holidaySet = buildHolidaySet(holidays);
-    
+
     let count = 0;
     const current = new Date(start.getTime());
-    
+
     while (current < end) {
         current.setDate(current.getDate() + 1);
         const dayOfWeek = current.getDay();
-        
+
         // Skip weekends
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             continue;
         }
-        
+
         // Skip holidays
         if (holidaySet && holidaySet.has(toDateString(current))) {
             continue;
         }
-        
+
         count++;
     }
-    
+
     // Return negative if ctx is after other
     return ctx._d.getTime() > otherDate.getTime() ? count : -count;
 };

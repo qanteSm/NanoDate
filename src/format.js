@@ -48,7 +48,7 @@ const REF_DATES = {
  */
 const warmLocaleCache = (locale) => {
     if (localeNameCache[locale]) return localeNameCache[locale];
-    
+
     const cache = {
         weekdays: [],      // dddd - Sunday, Monday...
         weekdaysShort: [], // ddd - Sun, Mon...
@@ -56,17 +56,17 @@ const warmLocaleCache = (locale) => {
         months: [],        // MMMM - January, February...
         monthsShort: []    // MMM - Jan, Feb...
     };
-    
+
     try {
         // Weekday formatters
         const wdLong = new Intl.DateTimeFormat(locale, { weekday: 'long' });
         const wdShort = new Intl.DateTimeFormat(locale, { weekday: 'short' });
         const wdNarrow = new Intl.DateTimeFormat(locale, { weekday: 'narrow' });
-        
+
         // Month formatters  
         const mLong = new Intl.DateTimeFormat(locale, { month: 'long' });
         const mShort = new Intl.DateTimeFormat(locale, { month: 'short' });
-        
+
         // Pre-computed reference dates for weekday extraction
         // Order: Sunday(0), Monday(1), Tuesday(2), Wednesday(3), Thursday(4), Friday(5), Saturday(6)
         // Using Jan 2024 dates: Sun=7th, Mon=1st, Tue=2nd, Wed=3rd, Thu=4th, Fri=5th, Sat=6th
@@ -79,14 +79,14 @@ const warmLocaleCache = (locale) => {
             new Date(2024, 0, 5),  // Friday (index 5)
             new Date(2024, 0, 6)   // Saturday (index 6)
         ];
-        
+
         // Extract weekday names
         for (let i = 0; i < 7; i++) {
             cache.weekdays[i] = wdLong.format(weekdayDates[i]);
             cache.weekdaysShort[i] = wdShort.format(weekdayDates[i]);
             cache.weekdaysMin[i] = wdNarrow.format(weekdayDates[i]);
         }
-        
+
         // Extract month names (index 0 = January)
         for (let i = 0; i < 12; i++) {
             const d = REF_DATES.months[i];
@@ -101,7 +101,7 @@ const warmLocaleCache = (locale) => {
         cache.months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         cache.monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     }
-    
+
     localeNameCache[locale] = cache;
     return cache;
 };
@@ -131,7 +131,7 @@ const PRECOMPILED = {
     'MM/DD/YYYY': (d) => pad2(d.getMonth() + 1) + '/' + pad2(d.getDate()) + '/' + d.getFullYear(),
     'DD-MM-YYYY': (d) => pad2(d.getDate()) + '-' + pad2(d.getMonth() + 1) + '-' + d.getFullYear(),
     'DD.MM.YYYY': (d) => pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear(),
-    
+
     // Time formats
     'HH:mm': (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes()),
     'HH:mm:ss': (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()),
@@ -139,32 +139,32 @@ const PRECOMPILED = {
     'hh:mm A': (d) => pad2(d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
     'h:mm A': (d) => (d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
     'hh:mm:ss A': (d) => pad2(d.getHours() % 12 || 12) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + ' ' + (d.getHours() < 12 ? 'AM' : 'PM'),
-    
+
     // DateTime formats
     'YYYY-MM-DDTHH:mm:ss': (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()),
     'YYYY-MM-DD HH:mm': (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()),
     'YYYY-MM-DD HH:mm:ss': (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()),
     'DD/MM/YYYY HH:mm': (d) => pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()),
     'MM/DD/YYYY HH:mm': (d) => pad2(d.getMonth() + 1) + '/' + pad2(d.getDate()) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()),
-    
+
     // ISO formats with timezone
     'YYYY-MM-DDTHH:mm:ssZ': (d) => {
         const offset = -d.getTimezoneOffset();
         const sign = offset >= 0 ? '+' : '-';
         const absOffset = Math.abs(offset);
-        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + 
-               pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + 
-               sign + pad2((absOffset / 60) | 0) + ':' + pad2(absOffset % 60);
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' +
+            pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) +
+            sign + pad2((absOffset / 60) | 0) + ':' + pad2(absOffset % 60);
     },
     'YYYY-MM-DDTHH:mm:ss.SSSZ': (d) => {
         const offset = -d.getTimezoneOffset();
         const sign = offset >= 0 ? '+' : '-';
         const absOffset = Math.abs(offset);
-        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + 
-               pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' + pad3(d.getMilliseconds()) +
-               sign + pad2((absOffset / 60) | 0) + ':' + pad2(absOffset % 60);
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' +
+            pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' + pad3(d.getMilliseconds()) +
+            sign + pad2((absOffset / 60) | 0) + ':' + pad2(absOffset % 60);
     },
-    
+
     // Special
     'ISO': (d) => d.toISOString(),
     'X': (d) => String((d.getTime() / 1000) | 0),  // Unix timestamp (seconds)
@@ -177,11 +177,12 @@ const PRECOMPILED = {
  */
 const getLocalePrecompiled = (fmt, locale) => {
     const key = fmt + '|' + locale;
-    if (compiledCache[key]) return compiledCache[key];
-    
+    const cached = compiledCache.get(key);
+    if (cached) return cached;
+
     const names = getLocaleNames(locale);
     let fn = null;
-    
+
     switch (fmt) {
         case 'dddd, MMMM D YYYY':
             fn = (d) => names.weekdays[d.getDay()] + ', ' + names.months[d.getMonth()] + ' ' + d.getDate() + ' ' + d.getFullYear();
@@ -229,20 +230,12 @@ const getLocalePrecompiled = (fmt, locale) => {
             fn = (d) => names.monthsShort[d.getMonth()] + ' ' + d.getFullYear();
             break;
     }
-    
+
     if (fn) {
-        // Cache the compiled function
-        if (compiledCacheSize >= MAX_COMPILED_CACHE) {
-            const keys = Object.keys(compiledCache);
-            for (let i = 0; i < keys.length / 2; i++) {
-                delete compiledCache[keys[i]];
-            }
-            compiledCacheSize = keys.length / 2;
-        }
-        compiledCache[key] = fn;
-        compiledCacheSize++;
+        // Cache using LRU
+        compiledCache.set(key, fn);
     }
-    
+
     return fn;
 };
 
@@ -275,29 +268,75 @@ const T = {
     a: { hour: 'numeric', hour12: true, hourCycle: 'h12' }
 };
 
+// ============================================
+// LRU CACHE IMPLEMENTATION
+// ============================================
+// Uses Map for O(1) access with insertion-order tracking for eviction
+// Respects configurable cache size via getCacheSize()
+
 /**
- * Formatter cache - Intl.DateTimeFormat instances are expensive to create
- * Using Object for faster property access than Map for small caches
+ * Get cache size from nano.cacheSize (imported dynamically to avoid circular dep)
+ * @returns {number} Cache size limit
  */
-const formatterCache = Object.create(null);
-let formatterCacheSize = 0;
-const MAX_FORMATTER_CACHE = 200;
+let _cacheSize = 50; // Default
+
+/**
+ * Set cache size externally (called from index.js)
+ * @param {number} size - New cache size
+ */
+export const setCacheSize = (size) => {
+    _cacheSize = size;
+};
+
+/**
+ * Get current cache size
+ * @returns {number} Current cache size limit
+ */
+const getCacheSize = () => _cacheSize;
+
+/**
+ * Compact LRU Cache Factory
+ * ~60% smaller than class-based implementation
+ * Uses Map for O(1) get/set with automatic size limiting
+ */
+export const createLRU = () => {
+    const m = new Map();
+    return {
+        get(k) {
+            if (!m.has(k)) return;
+            const v = m.get(k);
+            m.delete(k);
+            m.set(k, v);
+            return v;
+        },
+        set(k, v) {
+            if (m.has(k)) m.delete(k);
+            else if (m.size >= getCacheSize()) m.delete(m.keys().next().value);
+            m.set(k, v);
+            return v;
+        },
+        has: k => m.has(k),
+        get size() { return m.size; }
+    };
+};
+
+/**
+ * Formatter cache - LRU for Intl.DateTimeFormat instances
+ * These are expensive to create (~0.5ms each)
+ */
+const formatterCache = createLRU();
 
 /**
  * Parsed token cache for format strings
- * Using Object for faster property access
+ * LRU cache to prevent unbounded growth
  */
-const tokenCache = Object.create(null);
-let tokenCacheSize = 0;
-const MAX_TOKEN_CACHE = 150;
+const tokenCache = createLRU();
 
 /**
  * Compiled format function cache
  * Maps format string -> compiled function for ultimate speed
  */
-const compiledCache = Object.create(null);
-let compiledCacheSize = 0;
-const MAX_COMPILED_CACHE = 100;
+const compiledCache = createLRU();
 
 /**
  * Fast key generation for formatter cache
@@ -313,25 +352,17 @@ const getOptionsKey = (options) => {
 
 /**
  * Get cached Intl.DateTimeFormat instance
+ * Uses LRU cache to prevent memory bloat
  * @param {string} locale - Locale string
  * @param {Object} options - DateTimeFormat options
  * @returns {Intl.DateTimeFormat}
  */
 const getFormatter = (locale, options) => {
     const key = locale + '|' + getOptionsKey(options);
-    let formatter = formatterCache[key];
+    let formatter = formatterCache.get(key);
     if (!formatter) {
-        // Simple cache eviction - clear half when full
-        if (formatterCacheSize >= MAX_FORMATTER_CACHE) {
-            const keys = Object.keys(formatterCache);
-            for (let i = 0; i < keys.length / 2; i++) {
-                delete formatterCache[keys[i]];
-            }
-            formatterCacheSize = keys.length / 2;
-        }
         formatter = new Intl.DateTimeFormat(locale, options);
-        formatterCache[key] = formatter;
-        formatterCacheSize++;
+        formatterCache.set(key, formatter);
     }
     return formatter;
 };
@@ -354,13 +385,7 @@ const ord = (n) => {
  * Browser: navigator.language
  * Node.js: Intl.DateTimeFormat().resolvedOptions().locale
  */
-const getLocale = (ctx) => {
-    if (ctx._l) return ctx._l;
-    if (typeof navigator !== 'undefined' && navigator.language) {
-        return navigator.language;
-    }
-    return Intl.DateTimeFormat().resolvedOptions().locale || 'en';
-};
+const getLocale = (ctx) => ctx._l || 'en';
 
 /**
  * Preset formats - Intl dateStyle/timeStyle kullanır (0 byte ek maliyet)
@@ -412,22 +437,22 @@ const TOKEN_REGEX = /\[([^\]]+)]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|dd|HH|H|
  * @returns {Array} Array of [type, value] tuples
  */
 const parseFormatTokens = (fmt) => {
-    const cached = tokenCache[fmt];
+    const cached = tokenCache.get(fmt);
     if (cached) return cached;
-    
+
     const tokens = [];
     let lastIndex = 0;
     let match;
-    
+
     // Reset regex state
     TOKEN_REGEX.lastIndex = 0;
-    
+
     while ((match = TOKEN_REGEX.exec(fmt)) !== null) {
         // Add literal text before this match
         if (match.index > lastIndex) {
             tokens.push([0, fmt.slice(lastIndex, match.index)]);
         }
-        
+
         // Add token
         if (match[0][0] === '[') {
             // Escaped text
@@ -435,26 +460,17 @@ const parseFormatTokens = (fmt) => {
         } else {
             tokens.push([1, match[0]]);
         }
-        
+
         lastIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining literal text
     if (lastIndex < fmt.length) {
         tokens.push([0, fmt.slice(lastIndex)]);
     }
-    
-    // Cache management
-    if (tokenCacheSize >= MAX_TOKEN_CACHE) {
-        const keys = Object.keys(tokenCache);
-        for (let i = 0; i < keys.length / 2; i++) {
-            delete tokenCache[keys[i]];
-        }
-        tokenCacheSize = keys.length / 2;
-    }
-    
-    tokenCache[fmt] = tokens;
-    tokenCacheSize++;
+
+    // Cache using LRU
+    tokenCache.set(fmt, tokens);
     return tokens;
 };
 
@@ -480,37 +496,37 @@ const formatToken = (token, date, locale) => {
         // Year
         case 'YYYY': return String(date.getFullYear());
         case 'YY': return String(date.getFullYear()).slice(-2);
-        
+
         // Month (numeric)
         case 'MM': return pad2(date.getMonth() + 1);
         case 'M': return String(date.getMonth() + 1);
-        
+
         // Day
         case 'DD': return pad2(date.getDate());
         case 'D': return String(date.getDate());
         case 'Do': return ord(date.getDate());
-        
+
         // Hour (24h)
         case 'HH': return pad2(date.getHours());
         case 'H': return String(date.getHours());
-        
+
         // Hour (12h)
         case 'hh': return pad2(to12Hour(date.getHours()));
         case 'h': return String(to12Hour(date.getHours()));
-        
+
         // Minute
         case 'mm': return pad2(date.getMinutes());
         case 'm': return String(date.getMinutes());
-        
+
         // Second
         case 'ss': return pad2(date.getSeconds());
         case 's': return String(date.getSeconds());
-        
+
         // Millisecond
         case 'SSS': return pad3(date.getMilliseconds());
-        
+
         // AM/PM (fast path for 'en' locale)
-        case 'A': 
+        case 'A':
             if (!locale || locale.startsWith('en')) {
                 return date.getHours() < 12 ? 'AM' : 'PM';
             }
@@ -520,11 +536,11 @@ const formatToken = (token, date, locale) => {
                 return date.getHours() < 12 ? 'am' : 'pm';
             }
             return getAmPm(date, locale, false);
-        
+
         // Timezone
         case 'Z': return getOffset(date, true);
         case 'ZZ': return getOffset(date, false);
-        
+
         // Fast path: locale-dependent tokens using cached names
         case 'dddd': {
             const names = getLocaleNames(locale);
@@ -547,7 +563,7 @@ const formatToken = (token, date, locale) => {
             return names.monthsShort[date.getMonth()];
         }
     }
-    
+
     // Slow path: other locale-dependent tokens
     const opt = T[token];
     if (!opt) return token;
@@ -580,7 +596,7 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
     if (PRECOMPILED[fmt]) {
         return PRECOMPILED[fmt](date);
     }
-    
+
     // Check for locale-aware precompiled format (second fastest path)
     const localePrecompiled = getLocalePrecompiled(fmt, locale);
     if (localePrecompiled) {
@@ -605,7 +621,7 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
 
     // Token-based formatting with caching
     const tokens = parseFormatTokens(fmt);
-    
+
     // Use array join for better string building performance
     const parts = [];
     for (let i = 0; i < tokens.length; i++) {
@@ -613,7 +629,7 @@ export const format = (ctx, fmt = 'YYYY-MM-DDTHH:mm:ssZ') => {
         // token[0] = type (0=literal, 1=token), token[1] = value
         parts.push(token[0] === 0 ? token[1] : formatToken(token[1], date, locale));
     }
-    
+
     return parts.join('');
 };
 
@@ -631,7 +647,7 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
     if (!dateStr || !fmt) {
         return nanoFactory(new Date(NaN), locale);
     }
-    
+
     // Token definitions with regex patterns
     const tokenDefs = {
         YYYY: { pattern: '(\\d{4})', type: 'year4' },
@@ -652,14 +668,14 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
         A: { pattern: '(AM|PM)', type: 'ampm' },
         a: { pattern: '(am|pm)', type: 'ampm' }
     };
-    
+
     // Find all tokens in the format string and their positions
     const tokens = [];
     let tempFmt = fmt;
-    
+
     // Token search order - longest first to avoid partial matches
     const searchOrder = ['YYYY', 'SSS', 'MM', 'DD', 'HH', 'hh', 'mm', 'ss', 'YY', 'M', 'D', 'H', 'h', 'm', 's', 'A', 'a'];
-    
+
     for (const token of searchOrder) {
         let idx = tempFmt.indexOf(token);
         while (idx !== -1) {
@@ -669,14 +685,14 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
             idx = tempFmt.indexOf(token);
         }
     }
-    
+
     // Sort by position
     tokens.sort((a, b) => a.pos - b.pos);
-    
+
     // Build regex from format string
     let regexStr = '';
     let lastEnd = 0;
-    
+
     for (const t of tokens) {
         // Add literal text before this token (escaped)
         if (t.pos > lastEnd) {
@@ -687,21 +703,21 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
         regexStr += t.pattern;
         lastEnd = t.pos + t.token.length;
     }
-    
+
     // Add remaining literal text
     if (lastEnd < fmt.length) {
         const literal = fmt.substring(lastEnd);
         regexStr += literal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     }
-    
+
     try {
         const regex = new RegExp('^' + regexStr + '$', 'i');
         const match = dateStr.match(regex);
-        
+
         if (!match) {
             return nanoFactory(new Date(NaN), locale);
         }
-        
+
         // Extract values
         const values = {
             year: new Date().getFullYear(),
@@ -714,11 +730,11 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
             isPM: null,
             is12Hour: false
         };
-        
+
         for (let i = 0; i < tokens.length; i++) {
             const { type } = tokens[i];
             const value = match[i + 1];
-            
+
             switch (type) {
                 case 'year4':
                     values.year = parseInt(value, 10);
@@ -753,7 +769,7 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
                     break;
             }
         }
-        
+
         // Handle 12-hour format with AM/PM
         if (values.is12Hour && values.isPM !== null) {
             if (values.isPM && values.hour < 12) {
@@ -762,7 +778,7 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
                 values.hour = 0;
             }
         }
-        
+
         const d = new Date(
             values.year,
             values.month,
@@ -772,7 +788,7 @@ export const parse = (dateStr, fmt, locale, nanoFactory) => {
             values.second,
             values.millisecond
         );
-        
+
         return nanoFactory(d, locale);
     } catch {
         return nanoFactory(new Date(NaN), locale);
