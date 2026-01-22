@@ -13,6 +13,49 @@ import { diff, isBefore, isAfter, isSame, isSameOrBefore, isSameOrAfter, isBetwe
 import { tz, tzChainable, utcOffset, toTimezone, getTimezone, initTimezone } from './timezone.js';
 
 /**
+ * Fast ISO 8601 date string regex for fast-path parsing
+ * Matches: YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss, YYYY-MM-DDTHH:mm:ss.SSS, with optional Z or ±HH:mm
+ */
+const ISO_REGEX = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?(?:Z|([+-])(\d{2}):?(\d{2}))?$/;
+
+/**
+ * Fast ISO string parser - avoids Date.parse overhead for common formats
+ * Returns null if not a recognized format, falling back to native parsing
+ */
+const fastParseISO = (str) => {
+    if (typeof str !== 'string' || str.length < 10) return null;
+    
+    const match = ISO_REGEX.exec(str);
+    if (!match) return null;
+    
+    const year = +match[1];
+    const month = +match[2] - 1;
+    const day = +match[3];
+    const hour = match[4] ? +match[4] : 0;
+    const minute = match[5] ? +match[5] : 0;
+    const second = match[6] ? +match[6] : 0;
+    const ms = match[7] ? +match[7].padEnd(3, '0') : 0;
+    
+    // If has timezone info (Z or offset)
+    if (match[0].includes('Z') || match[8]) {
+        let timestamp = Date.UTC(year, month, day, hour, minute, second, ms);
+        
+        // Apply offset if present (not Z)
+        if (match[8]) {
+            const offsetSign = match[8] === '+' ? -1 : 1;
+            const offsetHours = +match[9];
+            const offsetMinutes = +match[10] || 0;
+            timestamp += offsetSign * (offsetHours * 60 + offsetMinutes) * 60000;
+        }
+        
+        return new Date(timestamp);
+    }
+    
+    // Local time
+    return new Date(year, month, day, hour, minute, second, ms);
+};
+
+/**
  * Global configuration
  */
 let globalConfig = {
@@ -159,18 +202,30 @@ export const nano = (input, locale) => {
     let d;
     let originalInput = input;
 
-    // Input türüne göre Date oluştur
+    // Input türüne göre Date oluştur - optimized paths
     if (input === undefined || input === null) {
+        // No input - current time
         d = new Date();
+        originalInput = undefined;
+    } else if (typeof input === 'number') {
+        // Timestamp - fastest path
+        d = new Date(input);
         originalInput = undefined;
     } else if (input._d) {
         // Başka bir NanoDate instance'ı
-        d = new Date(input._d);
+        d = new Date(input._d.getTime()); // Use getTime() for faster cloning
         locale = locale || input._l;
         originalInput = input._input;
     } else if (input instanceof Date) {
-        d = new Date(input);
-        originalInput = undefined; // Date objects don't need string validation
+        d = new Date(input.getTime()); // Use getTime() for faster cloning
+        originalInput = undefined;
+    } else if (typeof input === 'string') {
+        // String input - try fast ISO parse first
+        d = fastParseISO(input);
+        if (!d) {
+            // Fall back to native parsing
+            d = new Date(input);
+        }
     } else {
         d = new Date(input);
     }

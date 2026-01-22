@@ -1,7 +1,12 @@
 /**
  * NanoDate Manipulation Module
- * Immutable date manipulation methods
- * All operations return new NanoDate instances
+ * High-performance immutable date manipulation
+ * 
+ * Optimizations:
+ * - Pre-computed millisecond constants
+ * - Timestamp arithmetic instead of Date mutations
+ * - Frozen lookup objects
+ * - Inline calculations
  */
 
 /**
@@ -18,9 +23,9 @@ export const init = (factory) => {
 };
 
 /**
- * Unit abbreviations to full names
+ * Unit abbreviations - frozen for performance
  */
-const UNIT_MAP = {
+const UNIT_MAP = Object.freeze({
     y: 'year', year: 'year', years: 'year',
     M: 'month', month: 'month', months: 'month',
     w: 'week', week: 'week', weeks: 'week',
@@ -29,66 +34,91 @@ const UNIT_MAP = {
     m: 'minute', minute: 'minute', minutes: 'minute',
     s: 'second', second: 'second', seconds: 'second',
     ms: 'millisecond', millisecond: 'millisecond', milliseconds: 'millisecond'
+});
+
+/**
+ * Pre-computed millisecond constants
+ */
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60000;
+const MS_PER_HOUR = 3600000;
+const MS_PER_DAY = 86400000;
+const MS_PER_WEEK = 604800000;
+
+/**
+ * Normalize unit string - with early return for common cases
+ */
+const normalizeUnit = (unit) => {
+    // Fast path for common units
+    if (unit === 'day' || unit === 'days' || unit === 'd') return 'day';
+    if (unit === 'month' || unit === 'months' || unit === 'M') return 'month';
+    if (unit === 'year' || unit === 'years' || unit === 'y') return 'year';
+    return UNIT_MAP[unit] || unit;
 };
 
 /**
- * Milliseconds per unit
+ * Days in each month (non-leap year) - lookup table
  */
-const MS = {
-    millisecond: 1,
-    second: 1000,
-    minute: 60 * 1000,
-    hour: 60 * 60 * 1000,
-    day: 24 * 60 * 60 * 1000,
-    week: 7 * 24 * 60 * 60 * 1000
-};
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /**
- * Normalize unit string
+ * Fast leap year check
  */
-const normalizeUnit = (unit) => UNIT_MAP[unit] || unit;
+const isLeapYear = (year) => (year & 3) === 0 && ((year % 100) !== 0 || (year % 400) === 0);
+
+/**
+ * Get days in a specific month
+ */
+const getDaysInMonth = (year, month) => {
+    if (month === 1) return isLeapYear(year) ? 29 : 28;
+    return DAYS_IN_MONTH[month];
+};
 
 /**
  * Add time to a date (immutable)
+ * Optimized with timestamp arithmetic for time units
  * 
  * @param {Object} ctx - NanoDate context
  * @param {number} value - Amount to add
  * @param {string} unit - Unit (year, month, week, day, hour, minute, second, millisecond)
  * @returns {Proxy} New NanoDate instance
- * 
- * @example
- * add(ctx, 7, 'days')      // 7 gün ekle
- * add(ctx, 1, 'month')     // 1 ay ekle
- * add(ctx, -2, 'hours')    // 2 saat çıkar (subtract ile aynı)
  */
 export const add = (ctx, value, unit) => {
-    const d = new Date(ctx._d);
     const u = normalizeUnit(unit);
+    const timestamp = ctx._d.getTime();
+
+    // Fast path: time-based units use pure timestamp arithmetic
+    switch (u) {
+        case 'millisecond':
+            return nano(new Date(timestamp + value), ctx._l);
+        case 'second':
+            return nano(new Date(timestamp + value * MS_PER_SECOND), ctx._l);
+        case 'minute':
+            return nano(new Date(timestamp + value * MS_PER_MINUTE), ctx._l);
+        case 'hour':
+            return nano(new Date(timestamp + value * MS_PER_HOUR), ctx._l);
+        case 'day':
+            return nano(new Date(timestamp + value * MS_PER_DAY), ctx._l);
+        case 'week':
+            return nano(new Date(timestamp + value * MS_PER_WEEK), ctx._l);
+    }
+
+    // Calendar-based units need Date object manipulation
+    const d = new Date(timestamp);
 
     switch (u) {
         case 'year':
             d.setFullYear(d.getFullYear() + value);
             break;
-        case 'month':
-            // Ay ekleme - edge case: 31 Ocak + 1 ay = 28/29 Şubat
+        case 'month': {
             const targetMonth = d.getMonth() + value;
             const dayOfMonth = d.getDate();
             d.setMonth(targetMonth, 1);
-            // Ayın son günü kontrolü
-            const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            d.setDate(Math.min(dayOfMonth, daysInMonth));
+            // Clamp to days in target month
+            const maxDays = getDaysInMonth(d.getFullYear(), d.getMonth());
+            d.setDate(Math.min(dayOfMonth, maxDays));
             break;
-        case 'week':
-        case 'day':
-        case 'hour':
-        case 'minute':
-        case 'second':
-        case 'millisecond':
-            d.setTime(d.getTime() + value * MS[u]);
-            break;
-        default:
-            // Unknown unit, return clone
-            break;
+        }
     }
 
     return nano(d, ctx._l);
@@ -96,112 +126,102 @@ export const add = (ctx, value, unit) => {
 
 /**
  * Subtract time from a date (immutable)
- * 
- * @param {Object} ctx - NanoDate context
- * @param {number} value - Amount to subtract
- * @param {string} unit - Unit
- * @returns {Proxy} New NanoDate instance
+ * Simply delegates to add with negated value
  */
 export const subtract = (ctx, value, unit) => add(ctx, -value, unit);
 
 /**
+ * Pre-computed start-of-day offset for common operations
+ */
+const START_OF_DAY = [0, 0, 0, 0]; // hours, minutes, seconds, ms
+
+/**
  * Set to start of a unit (immutable)
+ * Optimized with timestamp arithmetic where possible
  * 
  * @param {Object} ctx - NanoDate context
  * @param {string} unit - Unit (year, month, week, day, hour, minute, second)
  * @returns {Proxy} New NanoDate instance
- * 
- * @example
- * startOf(ctx, 'month')    // Ayın ilk günü 00:00:00.000
- * startOf(ctx, 'day')      // Günün başı 00:00:00.000
- * startOf(ctx, 'week')     // Haftanın ilk günü (Pazar veya Pazartesi locale'e bağlı)
  */
 export const startOf = (ctx, unit) => {
-    const d = new Date(ctx._d);
     const u = normalizeUnit(unit);
-
+    const d = ctx._d;
+    
     switch (u) {
         case 'year':
-            d.setMonth(0, 1);
-            d.setHours(0, 0, 0, 0);
-            break;
+            return nano(new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0), ctx._l);
         case 'month':
-            d.setDate(1);
-            d.setHours(0, 0, 0, 0);
-            break;
-        case 'week':
-            // Haftanın başına git (Pazar = 0)
+            return nano(new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0), ctx._l);
+        case 'week': {
             const day = d.getDay();
-            d.setDate(d.getDate() - day);
-            d.setHours(0, 0, 0, 0);
-            break;
+            const newDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day, 0, 0, 0, 0);
+            return nano(newDate, ctx._l);
+        }
         case 'day':
-            d.setHours(0, 0, 0, 0);
-            break;
-        case 'hour':
-            d.setMinutes(0, 0, 0);
-            break;
-        case 'minute':
-            d.setSeconds(0, 0);
-            break;
-        case 'second':
-            d.setMilliseconds(0);
-            break;
+            return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0), ctx._l);
+        case 'hour': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_HOUR)), ctx._l);
+        }
+        case 'minute': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_MINUTE)), ctx._l);
+        }
+        case 'second': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_SECOND)), ctx._l);
+        }
+        default:
+            return nano(new Date(d.getTime()), ctx._l);
     }
-
-    return nano(d, ctx._l);
 };
 
 /**
  * Set to end of a unit (immutable)
+ * Optimized with direct Date construction
  * 
  * @param {Object} ctx - NanoDate context
  * @param {string} unit - Unit
  * @returns {Proxy} New NanoDate instance
- * 
- * @example
- * endOf(ctx, 'month')      // Ayın son günü 23:59:59.999
- * endOf(ctx, 'day')        // Günün sonu 23:59:59.999
  */
 export const endOf = (ctx, unit) => {
-    const d = new Date(ctx._d);
     const u = normalizeUnit(unit);
+    const d = ctx._d;
 
     switch (u) {
         case 'year':
-            d.setMonth(11, 31);
-            d.setHours(23, 59, 59, 999);
-            break;
-        case 'month':
-            // Sonraki ayın ilk günü - 1ms = Bu ayın son günü
-            d.setMonth(d.getMonth() + 1, 0);
-            d.setHours(23, 59, 59, 999);
-            break;
-        case 'week':
-            // Haftanın sonuna git (Cumartesi = 6)
+            return nano(new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999), ctx._l);
+        case 'month': {
+            // Get last day of month using day 0 of next month
+            const lastDay = getDaysInMonth(d.getFullYear(), d.getMonth());
+            return nano(new Date(d.getFullYear(), d.getMonth(), lastDay, 23, 59, 59, 999), ctx._l);
+        }
+        case 'week': {
             const day = d.getDay();
-            d.setDate(d.getDate() + (6 - day));
-            d.setHours(23, 59, 59, 999);
-            break;
+            return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (6 - day), 23, 59, 59, 999), ctx._l);
+        }
         case 'day':
-            d.setHours(23, 59, 59, 999);
-            break;
-        case 'hour':
-            d.setMinutes(59, 59, 999);
-            break;
-        case 'minute':
-            d.setSeconds(59, 999);
-            break;
-        case 'second':
-            d.setMilliseconds(999);
-            break;
+            return nano(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999), ctx._l);
+        case 'hour': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_HOUR) + MS_PER_HOUR - 1), ctx._l);
+        }
+        case 'minute': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_MINUTE) + MS_PER_MINUTE - 1), ctx._l);
+        }
+        case 'second': {
+            const ts = d.getTime();
+            return nano(new Date(ts - (ts % MS_PER_SECOND) + MS_PER_SECOND - 1), ctx._l);
+        }
+        default:
+            return nano(new Date(d.getTime()), ctx._l);
     }
-
-    return nano(d, ctx._l);
 };
 
 /**
  * Set a specific unit value (immutable)
+ * Optimized with direct Date construction
  * 
  * @param {Object} ctx - NanoDate context
  * @param {string} unit - Unit to set
@@ -209,7 +229,7 @@ export const endOf = (ctx, unit) => {
  * @returns {Proxy} New NanoDate instance
  */
 export const set = (ctx, unit, value) => {
-    const d = new Date(ctx._d);
+    const d = new Date(ctx._d.getTime());
     const u = normalizeUnit(unit);
 
     switch (u) {

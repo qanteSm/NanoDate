@@ -1,6 +1,12 @@
 /**
  * NanoDate Utilities Module
- * Comparison and utility functions
+ * High-performance comparison and utility functions
+ * 
+ * Optimizations:
+ * - Pre-computed constants for common values
+ * - Inline calculations where possible
+ * - Lookup tables for leap years and days in month
+ * - Timestamp arithmetic instead of Date object manipulation
  */
 
 /**
@@ -16,9 +22,9 @@ export const initUtils = (factory) => {
 };
 
 /**
- * Unit abbreviations
+ * Unit abbreviations - frozen for performance
  */
-const UNIT_MAP = {
+const UNIT_MAP = Object.freeze({
     y: 'year', year: 'year', years: 'year',
     M: 'month', month: 'month', months: 'month',
     w: 'week', week: 'week', weeks: 'week',
@@ -27,24 +33,41 @@ const UNIT_MAP = {
     m: 'minute', minute: 'minute', minutes: 'minute',
     s: 'second', second: 'second', seconds: 'second',
     ms: 'millisecond', millisecond: 'millisecond', milliseconds: 'millisecond'
-};
+});
 
 /**
- * Milliseconds per unit
+ * Milliseconds per unit - pre-computed constants
  */
-const MS = {
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60000;
+const MS_PER_HOUR = 3600000;
+const MS_PER_DAY = 86400000;
+const MS_PER_WEEK = 604800000;
+
+const MS = Object.freeze({
     millisecond: 1,
-    second: 1000,
-    minute: 60 * 1000,
-    hour: 60 * 60 * 1000,
-    day: 24 * 60 * 60 * 1000,
-    week: 7 * 24 * 60 * 60 * 1000
-};
+    second: MS_PER_SECOND,
+    minute: MS_PER_MINUTE,
+    hour: MS_PER_HOUR,
+    day: MS_PER_DAY,
+    week: MS_PER_WEEK
+});
+
+/**
+ * Days in each month (non-leap year) - lookup table
+ */
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * Fast leap year check - using bitwise operations where possible
+ */
+const isLeapYearNum = (year) => (year & 3) === 0 && ((year % 100) !== 0 || (year % 400) === 0);
 
 const normalizeUnit = (unit) => UNIT_MAP[unit] || unit;
 
 /**
  * Get the Date object from input (NanoDate or Date or string)
+ * Optimized with early returns and getTime() for fast cloning
  */
 const toDate = (input) => {
     if (!input) return new Date();
@@ -54,45 +77,62 @@ const toDate = (input) => {
 };
 
 /**
+ * Get timestamp from input - faster than toDate when only timestamp needed
+ */
+const toTimestamp = (input) => {
+    if (!input) return Date.now();
+    if (input._d) return input._d.getTime();
+    if (input instanceof Date) return input.getTime();
+    if (typeof input === 'number') return input;
+    return new Date(input).getTime();
+};
+
+/**
  * Calculate difference between two dates
+ * Optimized with timestamp arithmetic
  * 
  * @param {Object} ctx - NanoDate context
  * @param {Object|Date|string} other - Date to compare with
  * @param {string} [unit='millisecond'] - Unit for result
  * @param {boolean} [precise=false] - If true, return float; if false, return integer
  * @returns {number} Difference in specified unit
- * 
- * @example
- * diff(ctx, '2026-01-14', 'days')     // 7
- * diff(ctx, '2026-02-21', 'months')   // 1
  */
 export const diff = (ctx, other, unit = 'millisecond', precise = false) => {
-    const otherDate = toDate(other);
-    const diffMs = ctx._d.getTime() - otherDate.getTime();
+    const thisTime = ctx._d.getTime();
+    const otherTime = toTimestamp(other);
+    const diffMs = thisTime - otherTime;
     const u = normalizeUnit(unit);
 
     let result;
 
     switch (u) {
         case 'year':
-            result = monthDiff(ctx._d, otherDate) / 12;
+            result = monthDiff(ctx._d, toDate(other)) / 12;
             break;
         case 'month':
-            result = monthDiff(ctx._d, otherDate);
+            result = monthDiff(ctx._d, toDate(other));
             break;
         case 'week':
-        case 'day':
-        case 'hour':
-        case 'minute':
-        case 'second':
-        case 'millisecond':
-            result = diffMs / MS[u];
+            result = diffMs / MS_PER_WEEK;
             break;
+        case 'day':
+            result = diffMs / MS_PER_DAY;
+            break;
+        case 'hour':
+            result = diffMs / MS_PER_HOUR;
+            break;
+        case 'minute':
+            result = diffMs / MS_PER_MINUTE;
+            break;
+        case 'second':
+            result = diffMs / MS_PER_SECOND;
+            break;
+        case 'millisecond':
         default:
             result = diffMs;
     }
 
-    return precise ? result : Math.trunc(result);
+    return precise ? result : (result | 0);  // Bitwise OR is faster than Math.trunc for integers
 };
 
 /**
@@ -115,47 +155,35 @@ const monthDiff = (a, b) => {
 
 /**
  * Check if date is before another date
- * 
- * @param {Object} ctx - NanoDate context
- * @param {Object|Date|string} other - Date to compare with
- * @param {string} [unit] - Granularity (optional)
- * @returns {boolean}
+ * Optimized with timestamp comparison
  */
 export const isBefore = (ctx, other, unit) => {
-    const otherDate = toDate(other);
-
     if (!unit) {
-        return ctx._d.getTime() < otherDate.getTime();
+        return ctx._d.getTime() < toTimestamp(other);
     }
-
-    // Truncate both dates to unit level
-    return truncateToUnit(ctx._d, unit) < truncateToUnit(otherDate, unit);
+    return truncateToUnit(ctx._d, unit) < truncateToUnit(toDate(other), unit);
 };
 
 /**
  * Check if date is after another date
+ * Optimized with timestamp comparison
  */
 export const isAfter = (ctx, other, unit) => {
-    const otherDate = toDate(other);
-
     if (!unit) {
-        return ctx._d.getTime() > otherDate.getTime();
+        return ctx._d.getTime() > toTimestamp(other);
     }
-
-    return truncateToUnit(ctx._d, unit) > truncateToUnit(otherDate, unit);
+    return truncateToUnit(ctx._d, unit) > truncateToUnit(toDate(other), unit);
 };
 
 /**
  * Check if date is same as another date
+ * Optimized with timestamp comparison
  */
 export const isSame = (ctx, other, unit) => {
-    const otherDate = toDate(other);
-
     if (!unit) {
-        return ctx._d.getTime() === otherDate.getTime();
+        return ctx._d.getTime() === toTimestamp(other);
     }
-
-    return truncateToUnit(ctx._d, unit) === truncateToUnit(otherDate, unit);
+    return truncateToUnit(ctx._d, unit) === truncateToUnit(toDate(other), unit);
 };
 
 /**
@@ -190,53 +218,40 @@ export const isBetween = (ctx, start, end, unit, inclusivity = '()') => {
 
 /**
  * Truncate date to unit level for comparison
+ * Optimized with early numeric returns for year/month
  */
 const truncateToUnit = (date, unit) => {
-    const d = new Date(date);
     const u = normalizeUnit(unit);
 
     switch (u) {
         case 'year':
-            return d.getFullYear();
+            return date.getFullYear();
         case 'month':
-            return d.getFullYear() * 12 + d.getMonth();
-        case 'day':
-            d.setHours(0, 0, 0, 0);
-            return d.getTime();
+            return date.getFullYear() * 12 + date.getMonth();
+        case 'day': {
+            // Use timestamp arithmetic instead of creating new Date
+            const ts = date.getTime();
+            const offset = date.getTimezoneOffset() * MS_PER_MINUTE;
+            return ((ts - offset) / MS_PER_DAY) | 0;
+        }
         case 'hour':
-            d.setMinutes(0, 0, 0);
-            return d.getTime();
+            return ((date.getTime() / MS_PER_HOUR) | 0);
         case 'minute':
-            d.setSeconds(0, 0);
-            return d.getTime();
+            return ((date.getTime() / MS_PER_MINUTE) | 0);
         case 'second':
-            d.setMilliseconds(0);
-            return d.getTime();
+            return ((date.getTime() / MS_PER_SECOND) | 0);
         default:
-            return d.getTime();
+            return date.getTime();
     }
 };
 
 /**
  * Check if a date is calendrically valid
- * Validates that the date actually exists (e.g., Feb 30 is invalid)
- * 
- * @param {number} year - Full year
- * @param {number} month - Month (1-12)
- * @param {number} day - Day of month
- * @returns {boolean} True if date is valid
+ * Uses lookup table for days in month
  */
 const isCalendarValid = (year, month, day) => {
-    // Check basic ranges
     if (month < 1 || month > 12 || day < 1) return false;
-    
-    // Days in each month (non-leap year)
-    const daysInMonths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    
-    // Check leap year for February
-    const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-    const maxDay = month === 2 && isLeap ? 29 : daysInMonths[month - 1];
-    
+    const maxDay = month === 2 && isLeapYearNum(year) ? 29 : DAYS_IN_MONTH[month - 1];
     return day <= maxDay;
 };
 
@@ -310,27 +325,38 @@ export const isValid = (ctx) => {
 
 /**
  * Check if year is a leap year
+ * Uses optimized bitwise check
  */
-export const isLeapYear = (ctx) => {
-    const year = ctx._d.getFullYear();
-    return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-};
+export const isLeapYear = (ctx) => isLeapYearNum(ctx._d.getFullYear());
 
 /**
  * Get days in month
+ * Uses lookup table with leap year adjustment
  */
 export const daysInMonth = (ctx) => {
-    return new Date(ctx._d.getFullYear(), ctx._d.getMonth() + 1, 0).getDate();
+    const month = ctx._d.getMonth();
+    if (month === 1) { // February
+        return isLeapYearNum(ctx._d.getFullYear()) ? 29 : 28;
+    }
+    return DAYS_IN_MONTH[month];
 };
 
 /**
  * Get day of year (1-365/366)
+ * Optimized with pre-computed cumulative days
  */
+const CUMULATIVE_DAYS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
 export const dayOfYear = (ctx) => {
-    const start = new Date(ctx._d.getFullYear(), 0, 0);
-    const diffMs = ctx._d - start;
-    const oneDay = 24 * 60 * 60 * 1000;
-    return Math.floor(diffMs / oneDay);
+    const d = ctx._d;
+    const month = d.getMonth();
+    const day = d.getDate();
+    let doy = CUMULATIVE_DAYS[month] + day;
+    // Add 1 for leap year if past February
+    if (month > 1 && isLeapYearNum(d.getFullYear())) {
+        doy++;
+    }
+    return doy;
 };
 
 /**
@@ -374,15 +400,21 @@ export const max = (...dates) => {
 // ============================================
 
 /**
+ * Get date string in YYYY-MM-DD format (local time)
+ */
+const toDateString = (d) => {
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    return year + '-' + (month < 10 ? '0' : '') + month + '-' + (day < 10 ? '0' : '') + day;
+};
+
+/**
  * Check if a date is a business day (Mon-Fri, not a holiday)
  * 
  * @param {Object} ctx - NanoDate context
  * @param {Array<Date|string>} [holidays=[]] - Array of holiday dates
  * @returns {boolean} True if business day
- * 
- * @example
- * isBusinessDay(ctx)                    // Check if weekday
- * isBusinessDay(ctx, ['2026-01-01'])   // Exclude holidays
  */
 export const isBusinessDay = (ctx, holidays = []) => {
     const dayOfWeek = ctx._d.getDay();
@@ -392,13 +424,16 @@ export const isBusinessDay = (ctx, holidays = []) => {
         return false;
     }
     
-    // Holiday check
+    // Holiday check - use local date strings for comparison
     if (holidays.length > 0) {
-        const dateStr = ctx._d.toISOString().split('T')[0];
+        const dateStr = toDateString(ctx._d);
         const holidaySet = new Set(
             holidays.map(h => {
+                if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
+                    return h; // Already in YYYY-MM-DD format
+                }
                 const d = h instanceof Date ? h : new Date(h);
-                return d.toISOString().split('T')[0];
+                return toDateString(d);
             })
         );
         return !holidaySet.has(dateStr);
@@ -420,15 +455,18 @@ export const isBusinessDay = (ctx, holidays = []) => {
  * addBusinessDays(ctx, -3, holidays)    // Subtract 3 business days
  */
 export const addBusinessDays = (ctx, days, holidays = []) => {
-    // Build holiday set for fast lookup
+    // Build holiday set for fast lookup using local date strings
     const holidaySet = new Set(
         holidays.map(h => {
+            if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
+                return h;
+            }
             const d = h instanceof Date ? h : new Date(h);
-            return d.toISOString().split('T')[0];
+            return toDateString(d);
         })
     );
     
-    const result = new Date(ctx._d);
+    const result = new Date(ctx._d.getTime());
     let remaining = Math.abs(days);
     const direction = days >= 0 ? 1 : -1;
     
@@ -442,7 +480,7 @@ export const addBusinessDays = (ctx, days, holidays = []) => {
         }
         
         // Skip holidays
-        const dateStr = result.toISOString().split('T')[0];
+        const dateStr = toDateString(result);
         if (holidaySet.has(dateStr)) {
             continue;
         }
@@ -470,16 +508,19 @@ export const diffBusinessDays = (ctx, other, holidays = []) => {
     const start = new Date(Math.min(ctx._d.getTime(), otherDate.getTime()));
     const end = new Date(Math.max(ctx._d.getTime(), otherDate.getTime()));
     
-    // Build holiday set for fast lookup
+    // Build holiday set for fast lookup using local date strings
     const holidaySet = new Set(
         holidays.map(h => {
+            if (typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h)) {
+                return h;
+            }
             const d = h instanceof Date ? h : new Date(h);
-            return d.toISOString().split('T')[0];
+            return toDateString(d);
         })
     );
     
     let count = 0;
-    const current = new Date(start);
+    const current = new Date(start.getTime());
     
     while (current < end) {
         current.setDate(current.getDate() + 1);
@@ -491,7 +532,7 @@ export const diffBusinessDays = (ctx, other, holidays = []) => {
         }
         
         // Skip holidays
-        const dateStr = current.toISOString().split('T')[0];
+        const dateStr = toDateString(current);
         if (holidaySet.has(dateStr)) {
             continue;
         }
